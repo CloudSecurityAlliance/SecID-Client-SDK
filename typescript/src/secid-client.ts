@@ -24,6 +24,40 @@ const DEFAULT_BASE_URL = "https://secid.cloudsecurityalliance.org";
 const DEFAULT_TIMEOUT_MS = 30_000; // 30 seconds
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024; // 10 MB
 
+async function readBodyWithByteLimit(resp: Response, maxBytes: number): Promise<string> {
+  const stream = resp.body;
+  if (!stream) return "";
+
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+
+    totalBytes += value.byteLength;
+    if (totalBytes > maxBytes) {
+      try {
+        await reader.cancel();
+      } catch {
+        // Best-effort cancel; limit error still propagates below.
+      }
+      throw new Error(`Response exceeds ${maxBytes} byte limit`);
+    }
+    chunks.push(value);
+  }
+
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
+}
+
 /** A single result that resolved to a URL. */
 export interface ResolutionResult {
   secid: string;
@@ -131,18 +165,18 @@ export class SecIDClient {
           message: `Response exceeds ${MAX_RESPONSE_BYTES} byte limit`,
         });
       }
-      const body = await resp.text();
-      if (body.length > MAX_RESPONSE_BYTES) {
+      const body = await readBodyWithByteLimit(resp, MAX_RESPONSE_BYTES);
+      data = JSON.parse(body) as Record<string, unknown>;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.startsWith("Response exceeds ")) {
         return new SecIDResponse({
           secid_query: secid,
           status: "error",
           results: [],
-          message: `Response exceeds ${MAX_RESPONSE_BYTES} byte limit`,
+          message: msg,
         });
       }
-      data = JSON.parse(body) as Record<string, unknown>;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
       const prefix = err instanceof DOMException && err.name === "TimeoutError"
         ? "Request timed out"
         : "Connection error";
