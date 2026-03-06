@@ -1,0 +1,614 @@
+{
+  "suite_version": "1.0",
+  "tests": [
+    {
+      "name": "found_cve",
+      "description": "CVE-2021-44228 resolves to 4 URLs. best_url is the weight-100 cve.org page.",
+      "category": "found",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+              "weight": 100,
+              "url": "https://www.cve.org/CVERecord?id=CVE-2021-44228"
+            },
+            {
+              "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+              "weight": 80,
+              "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+            },
+            {
+              "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+              "weight": 60,
+              "url": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q"
+            },
+            {
+              "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+              "weight": 50,
+              "url": "https://www.cvedetails.com/cve/CVE-2021-44228/"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://www.cve.org/CVERecord?id=CVE-2021-44228",
+        "was_corrected": false,
+        "resolution_result_count": 4,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "found_single_result",
+      "description": "Single resolution result. Simplest happy path.",
+      "category": "found",
+      "input": {
+        "secid": "secid:weakness/mitre.org/cwe#CWE-79",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:weakness/mitre.org/cwe#CWE-79",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:weakness/mitre.org/cwe#CWE-79",
+              "weight": 100,
+              "url": "https://cwe.mitre.org/data/definitions/79.html"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://cwe.mitre.org/data/definitions/79.html",
+        "was_corrected": false,
+        "resolution_result_count": 1,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "found_multiple_weights",
+      "description": "Results arrive out of order [50, 100, 45]. best_url picks the weight-100 entry.",
+      "category": "found",
+      "input": {
+        "secid": "secid:ttp/mitre.org/attack#T1059.003",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:ttp/mitre.org/attack#T1059.003",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:ttp/mitre.org/attack#T1059.003",
+              "weight": 50,
+              "url": "https://d3fend.mitre.org/offensive-technique/attack/T1059.003"
+            },
+            {
+              "secid": "secid:ttp/mitre.org/attack#T1059.003",
+              "weight": 100,
+              "url": "https://attack.mitre.org/techniques/T1059/003/"
+            },
+            {
+              "secid": "secid:ttp/mitre.org/attack#T1059.003",
+              "weight": 45,
+              "url": "https://www.mitreatt.ck.wiki/techniques/T1059/003"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://attack.mitre.org/techniques/T1059/003/",
+        "was_corrected": false,
+        "resolution_result_count": 3,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "corrected_misplaced_subpath",
+      "description": "User put RHSA ID in name instead of subpath. Server corrects and resolves anyway.",
+      "category": "corrected",
+      "input": {
+        "secid": "secid:advisory/redhat.com/RHSA-2026:0932",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/redhat.com/RHSA-2026:0932",
+          "status": "corrected",
+          "results": [
+            {
+              "secid": "secid:advisory/redhat.com/errata#RHSA-2026:0932",
+              "weight": 100,
+              "url": "https://access.redhat.com/errata/RHSA-2026:0932"
+            },
+            {
+              "secid": "secid:advisory/redhat.com/errata#RHSA-2026:0932",
+              "weight": 50,
+              "url": "https://errata.almalinux.org/9/RHSA-2026:0932.html"
+            }
+          ],
+          "message": "Corrected: identifier 'RHSA-2026:0932' moved from name to subpath under 'errata'"
+        }
+      },
+      "expected": {
+        "status": "corrected",
+        "best_url": "https://access.redhat.com/errata/RHSA-2026:0932",
+        "was_corrected": true,
+        "resolution_result_count": 2,
+        "registry_result_count": 0,
+        "message": "Corrected: identifier 'RHSA-2026:0932' moved from name to subpath under 'errata'"
+      }
+    },
+    {
+      "name": "related_version_required",
+      "description": "NIST CSF without version returns registry data for browsing, not resolution results.",
+      "category": "related",
+      "input": {
+        "secid": "secid:control/nist.gov/csf",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:control/nist.gov/csf",
+          "status": "related",
+          "results": [
+            {
+              "secid": "secid:control/nist.gov/csf@1.1",
+              "data": {
+                "official_name": "NIST Cybersecurity Framework v1.1",
+                "urls": [{"type": "website", "url": "https://www.nist.gov/cyberframework/framework"}]
+              }
+            },
+            {
+              "secid": "secid:control/nist.gov/csf@2.0",
+              "data": {
+                "official_name": "NIST Cybersecurity Framework v2.0",
+                "urls": [{"type": "website", "url": "https://www.nist.gov/cyberframework"}]
+              }
+            }
+          ],
+          "message": "Multiple versions exist. Specify @version: @1.1 or @2.0"
+        }
+      },
+      "expected": {
+        "status": "related",
+        "best_url": null,
+        "was_corrected": false,
+        "resolution_result_count": 0,
+        "registry_result_count": 2,
+        "message": "Multiple versions exist. Specify @version: @1.1 or @2.0"
+      }
+    },
+    {
+      "name": "not_found_unknown_namespace",
+      "description": "Completely unknown namespace returns not_found with guidance.",
+      "category": "not_found",
+      "input": {
+        "secid": "secid:advisory/nonexistent.example.com/foo#BAR-123",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/nonexistent.example.com/foo#BAR-123",
+          "status": "not_found",
+          "results": [],
+          "message": "No namespace 'nonexistent.example.com/foo' registered for type 'advisory'. See secid:advisory/* for available namespaces."
+        }
+      },
+      "expected": {
+        "status": "not_found",
+        "best_url": null,
+        "was_corrected": false,
+        "resolution_result_count": 0,
+        "registry_result_count": 0,
+        "message": "No namespace 'nonexistent.example.com/foo' registered for type 'advisory'. See secid:advisory/* for available namespaces."
+      }
+    },
+    {
+      "name": "not_found_unknown_type",
+      "description": "Invalid type returns not_found with valid types listed.",
+      "category": "not_found",
+      "input": {
+        "secid": "secid:notavalidtype/foo.com/bar",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:notavalidtype/foo.com/bar",
+          "status": "not_found",
+          "results": [],
+          "message": "Unknown type 'notavalidtype'. Valid types: advisory, weakness, ttp, control, regulation, entity, reference"
+        }
+      },
+      "expected": {
+        "status": "not_found",
+        "best_url": null,
+        "was_corrected": false,
+        "resolution_result_count": 0,
+        "registry_result_count": 0,
+        "message": "Unknown type 'notavalidtype'. Valid types: advisory, weakness, ttp, control, regulation, entity, reference"
+      }
+    },
+    {
+      "name": "error_empty_query",
+      "description": "Empty string input returns error with guidance.",
+      "category": "error",
+      "input": {
+        "secid": "",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "",
+          "status": "error",
+          "results": [],
+          "message": "Empty query. Format: secid:type/namespace/name[@version][#subpath]. Example: secid:advisory/mitre.org/cve#CVE-2021-44228"
+        }
+      },
+      "expected": {
+        "status": "error",
+        "best_url": null,
+        "was_corrected": false,
+        "resolution_result_count": 0,
+        "registry_result_count": 0,
+        "message": "Empty query. Format: secid:type/namespace/name[@version][#subpath]. Example: secid:advisory/mitre.org/cve#CVE-2021-44228"
+      }
+    },
+    {
+      "name": "error_malformed",
+      "description": "Garbage input returns error with guidance.",
+      "category": "error",
+      "input": {
+        "secid": "!!!not-a-secid!!!",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "!!!not-a-secid!!!",
+          "status": "error",
+          "results": [],
+          "message": "Could not parse input. Format: secid:type/namespace/name[@version][#subpath]"
+        }
+      },
+      "expected": {
+        "status": "error",
+        "best_url": null,
+        "was_corrected": false,
+        "resolution_result_count": 0,
+        "registry_result_count": 0,
+        "message": "Could not parse input. Format: secid:type/namespace/name[@version][#subpath]"
+      }
+    },
+    {
+      "name": "encoding_hash_in_url",
+      "description": "Verify the client sends %23 not literal # in the request URL. The mock captures the request path.",
+      "category": "encoding",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2024-1234",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/mitre.org/cve#CVE-2024-1234",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:advisory/mitre.org/cve#CVE-2024-1234",
+              "weight": 100,
+              "url": "https://www.cve.org/CVERecord?id=CVE-2024-1234"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://www.cve.org/CVERecord?id=CVE-2024-1234",
+        "was_corrected": false,
+        "resolution_result_count": 1,
+        "registry_result_count": 0,
+        "message": null,
+        "request_url_contains": "%23",
+        "request_url_not_contains": "#CVE"
+      }
+    },
+    {
+      "name": "encoding_colon_preserved",
+      "description": "RHSA-2026:0932 colon preserved through round-trip in secid_query.",
+      "category": "encoding",
+      "input": {
+        "secid": "secid:advisory/redhat.com/errata#RHSA-2026:0932",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/redhat.com/errata#RHSA-2026:0932",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:advisory/redhat.com/errata#RHSA-2026:0932",
+              "weight": 100,
+              "url": "https://access.redhat.com/errata/RHSA-2026:0932"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://access.redhat.com/errata/RHSA-2026:0932",
+        "was_corrected": false,
+        "resolution_result_count": 1,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "encoding_dot_preserved",
+      "description": "T1059.003 dot preserved through round-trip in secid_query.",
+      "category": "encoding",
+      "input": {
+        "secid": "secid:ttp/mitre.org/attack#T1059.003",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:ttp/mitre.org/attack#T1059.003",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:ttp/mitre.org/attack#T1059.003",
+              "weight": 100,
+              "url": "https://attack.mitre.org/techniques/T1059/003/"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://attack.mitre.org/techniques/T1059/003/",
+        "was_corrected": false,
+        "resolution_result_count": 1,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "client_timeout",
+      "description": "Mock server hangs. Client should return error within its timeout period.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "behavior": "timeout"
+      },
+      "expected": {
+        "raises_error": true,
+        "error_contains": "timeout"
+      }
+    },
+    {
+      "name": "client_oversized_response",
+      "description": "Mock returns >10MB body. Client should reject it.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "behavior": "oversized_body",
+        "body_size_bytes": 11000000
+      },
+      "expected": {
+        "raises_error": true
+      }
+    },
+    {
+      "name": "client_invalid_json",
+      "description": "Server returns non-JSON (HTML error page). Client should return error, not crash.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "raw_body": "<html><body>Bad Gateway</body></html>",
+        "content_type": "text/html"
+      },
+      "expected": {
+        "raises_error": true
+      }
+    },
+    {
+      "name": "client_http_500",
+      "description": "Server returns 500 with JSON error body. Client handles gracefully.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 500,
+        "body": {
+          "secid_query": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+          "status": "error",
+          "results": [],
+          "message": "Internal server error"
+        }
+      },
+      "expected": {
+        "raises_error": true
+      }
+    },
+    {
+      "name": "client_http_500_non_json",
+      "description": "Server returns 500 with HTML body. Client handles gracefully.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 500,
+        "raw_body": "<html><body>Internal Server Error</body></html>",
+        "content_type": "text/html"
+      },
+      "expected": {
+        "raises_error": true
+      }
+    },
+    {
+      "name": "client_network_error",
+      "description": "Connection refused (no server listening). Client returns error.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "behavior": "connection_refused"
+      },
+      "expected": {
+        "raises_error": true
+      }
+    },
+    {
+      "name": "empty_results_array",
+      "description": "Server says 'found' but results=[] (shouldn't happen, but client shouldn't crash).",
+      "category": "edge_case",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-9999-0001",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/mitre.org/cve#CVE-9999-0001",
+          "status": "found",
+          "results": [],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": null,
+        "was_corrected": false,
+        "resolution_result_count": 0,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "best_url_on_registry_only",
+      "description": "Results have only data fields (registry results), no weight/url. best_url should be null.",
+      "category": "edge_case",
+      "input": {
+        "secid": "secid:control/nist.gov/csf@2.0",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:control/nist.gov/csf@2.0",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:control/nist.gov/csf@2.0",
+              "data": {
+                "official_name": "NIST Cybersecurity Framework v2.0",
+                "urls": [{"type": "website", "url": "https://www.nist.gov/cyberframework"}],
+                "patterns": ["^[A-Z]{2}(\\.[A-Z]{2})?(-\\d+)?$"],
+                "examples": ["GV.OC-1", "PR.AC-1"]
+              }
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": null,
+        "was_corrected": false,
+        "resolution_result_count": 0,
+        "registry_result_count": 1,
+        "message": null
+      }
+    },
+    {
+      "name": "cross_source_mixed_results",
+      "description": "Response contains both resolution results (with weight/url) and registry results (with data).",
+      "category": "edge_case",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2023-44487",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/mitre.org/cve#CVE-2023-44487",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:advisory/mitre.org/cve#CVE-2023-44487",
+              "weight": 100,
+              "url": "https://www.cve.org/CVERecord?id=CVE-2023-44487"
+            },
+            {
+              "secid": "secid:advisory/mitre.org/cve#CVE-2023-44487",
+              "weight": 80,
+              "url": "https://nvd.nist.gov/vuln/detail/CVE-2023-44487"
+            },
+            {
+              "secid": "secid:advisory/mitre.org/cve",
+              "data": {
+                "official_name": "Common Vulnerabilities and Exposures",
+                "urls": [{"type": "website", "url": "https://cve.org"}]
+              }
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://www.cve.org/CVERecord?id=CVE-2023-44487",
+        "was_corrected": false,
+        "resolution_result_count": 2,
+        "registry_result_count": 1,
+        "message": null
+      }
+    }
+  ]
+}

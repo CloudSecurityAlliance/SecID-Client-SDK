@@ -17,6 +17,8 @@
   ],
   "scripts": {
     "build": "tsc",
+    "pretest": "tsc",
+    "test": "node --test dist/secid-client.test.js",
     "prepublishOnly": "tsc"
   },
   "engines": {
