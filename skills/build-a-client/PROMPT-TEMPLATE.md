@@ -126,3 +126,5 @@ not_found: No namespace 'totallyinvented.com' in the advisory registry.
 8. Handle HTTP errors gracefully (network failures, non-200 responses)
 9. Include type hints / type annotations
 10. Include docstrings explaining the encoding gotcha and status values
+11. **Set a 30-second request timeout** — prevents hanging on unresponsive servers
+12. **Limit response body to 10 MB** — read at most 10 MB and reject anything larger. Normal responses are 1–5 KB; this protects against memory exhaustion when the client is pointed at a custom base URL

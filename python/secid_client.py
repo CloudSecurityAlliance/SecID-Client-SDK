@@ -18,11 +18,13 @@ Usage as library:
     print(response.best_url)
 
 Usage as CLI:
-    python secid_client.py "secid:advisory/mitre.org/cve#CVE-2021-44228"
-    python secid_client.py --json "secid:advisory/mitre.org/cve#CVE-2021-44228"
+    secid "secid:advisory/mitre.org/cve#CVE-2021-44228"
+    secid --json "secid:advisory/mitre.org/cve#CVE-2021-44228"
 """
 
 from __future__ import annotations
+
+__version__ = "0.1.0"
 
 import json
 import sys
@@ -32,6 +34,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 DEFAULT_BASE_URL = "https://secid.cloudsecurityalliance.org"
+DEFAULT_TIMEOUT = 30  # seconds
+MAX_RESPONSE_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 @dataclass
@@ -83,8 +87,9 @@ class SecIDClient:
         base_url: API base URL. Defaults to the public SecID service.
     """
 
-    def __init__(self, base_url: str = DEFAULT_BASE_URL) -> None:
+    def __init__(self, base_url: str = DEFAULT_BASE_URL, timeout: int = DEFAULT_TIMEOUT) -> None:
         self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
 
     def resolve(self, secid: str) -> SecIDResponse:
         """Resolve a SecID string to URL(s).
@@ -104,17 +109,24 @@ class SecIDClient:
             "User-Agent": "secid-python-client/1.0",
         })
         try:
-            with urllib.request.urlopen(req) as resp:
-                data = json.loads(resp.read().decode())
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                body = resp.read(MAX_RESPONSE_BYTES + 1)
+                if len(body) > MAX_RESPONSE_BYTES:
+                    return SecIDResponse(
+                        secid_query=secid,
+                        status="error",
+                        message=f"Response exceeds {MAX_RESPONSE_BYTES} byte limit",
+                    )
+                data = json.loads(body.decode())
         except urllib.error.HTTPError as e:
-            body = e.read().decode()
+            err_body = e.read(MAX_RESPONSE_BYTES).decode()
             try:
-                data = json.loads(body)
+                data = json.loads(err_body)
             except (json.JSONDecodeError, ValueError):
                 return SecIDResponse(
                     secid_query=secid,
                     status="error",
-                    message=f"HTTP {e.code}: {body[:200]}",
+                    message=f"HTTP {e.code}: {err_body[:200]}",
                 )
         except urllib.error.URLError as e:
             return SecIDResponse(
@@ -147,12 +159,12 @@ class SecIDClient:
 
 def main() -> None:
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
-        print("Usage: secid_client.py [--json] <secid>")
+        print("Usage: secid [--json] <secid>")
         print()
         print("Examples:")
-        print('  secid_client.py "secid:advisory/mitre.org/cve#CVE-2021-44228"')
-        print('  secid_client.py --json "secid:advisory/mitre.org/cve#CVE-2021-44228"')
-        print('  secid_client.py "secid:advisory/CVE-2021-44228"')
+        print('  secid "secid:advisory/mitre.org/cve#CVE-2021-44228"')
+        print('  secid --json "secid:advisory/mitre.org/cve#CVE-2021-44228"')
+        print('  secid "secid:advisory/CVE-2021-44228"')
         sys.exit(0)
 
     json_mode = "--json" in sys.argv

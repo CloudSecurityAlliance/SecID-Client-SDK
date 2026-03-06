@@ -1,0 +1,51 @@
+{
+  "name": "secid",
+  "version": "0.1.0",
+  "description": "Resolve security identifiers to URLs using the SecID API",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/secid-client.d.ts",
+      "default": "./dist/secid-client.js"
+    }
+  },
+  "bin": {
+    "secid": "./dist/secid-cli.js"
+  },
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "tsc"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "security",
+    "cve",
+    "vulnerability",
+    "secid",
+    "cybersecurity",
+    "mitre",
+    "attack",
+    "cwe",
+    "nist"
+  ],
+  "author": "Cloud Security Alliance <research@cloudsecurityalliance.org>",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/CloudSecurityAlliance/SecID",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CloudSecurityAlliance/SecID-Client-SDK.git",
+    "directory": "typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/CloudSecurityAlliance/SecID-Client-SDK/issues"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "typescript": "^5.0.0"
+  }
+}

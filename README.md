@@ -8,9 +8,33 @@ The primary artifact here is **instructions that AI assistants follow to build c
 
 **Philosophy: It's easier to verify AI-generated code than audit someone else's package.**
 
-## Three Paths to Use SecID
+## Four Paths to Use SecID
 
-### Path 1: AI-to-AI (MCP)
+### Path 1: Install from Package Registry
+
+```bash
+pip install secid      # Python 3.9+
+npm install secid      # Node 18+
+```
+
+Then use as library or CLI:
+
+```bash
+# CLI
+secid "secid:advisory/mitre.org/cve#CVE-2021-44228"
+
+# Python
+from secid_client import SecIDClient
+client = SecIDClient()
+url = client.best_url("secid:advisory/mitre.org/cve#CVE-2021-44228")
+
+# TypeScript
+import { SecIDClient } from "secid";
+const client = new SecIDClient();
+const url = await client.bestUrl("secid:advisory/mitre.org/cve#CVE-2021-44228");
+```
+
+### Path 2: AI-to-AI (MCP)
 
 Connect your AI assistant to the SecID MCP server. Tools are self-describing. Done.
 
@@ -21,7 +45,7 @@ Transport: Streamable HTTP (stateless, no auth)
 
 The MCP server IS the SDK for AI-to-AI interaction. It also exposes `secid://docs/build-a-client` and `secid://docs/prompt-template` as resources — an AI can read these to generate an HTTP client in any language.
 
-### Path 2: AI-Generated Client
+### Path 3: AI-Generated Client
 
 Give your AI assistant the prompt template. It generates a working client in your language.
 
@@ -32,7 +56,7 @@ Give your AI assistant the prompt template. It generates a working client in you
 
 Everything the AI needs is in that one prompt — no external docs required.
 
-### Path 3: Copy a Reference Implementation
+### Path 4: Copy a Reference Implementation
 
 Single file. Zero dependencies. Copy and go.
 
@@ -77,10 +101,17 @@ SecID-Client-SDK/
 │       ├── API-CONTRACT.md        # Formal API spec (request, response, encoding)
 │       ├── RESULT-HANDLING.md     # Statuses, weights, cross-source, versions
 │       └── PROMPT-TEMPLATE.md     # Copy-paste prompt for any language
-├── python/
-│   └── secid_client.py            # Python client — stdlib only
-├── typescript/
-│   └── secid-client.ts            # TypeScript client — fetch only
+├── python/                        # pip install secid
+│   ├── secid_client.py            # Python client — stdlib only
+│   ├── pyproject.toml             # Package config (hatchling)
+│   └── README.md                  # PyPI page
+├── typescript/                    # npm install secid
+│   ├── src/
+│   │   ├── secid-client.ts        # Library exports
+│   │   └── secid-cli.ts           # CLI entry point
+│   ├── package.json               # Package config (ESM, Node 18+)
+│   ├── tsconfig.json              # TypeScript compiler config
+│   └── README.md                  # npm page
 └── go/
     └── secid.go                   # Go client — stdlib only
 ```

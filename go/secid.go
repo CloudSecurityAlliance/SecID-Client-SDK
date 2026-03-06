@@ -29,9 +29,12 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 )
 
 const DefaultBaseURL = "https://secid.cloudsecurityalliance.org"
+const DefaultTimeout = 30 * time.Second
+const MaxResponseBytes = 10 * 1024 * 1024 // 10 MB
 
 // Response is the envelope returned by the SecID resolve API.
 type Response struct {
@@ -112,7 +115,7 @@ func NewClient(baseURL string) *Client {
 	}
 	return &Client{
 		BaseURL:    strings.TrimRight(baseURL, "/"),
-		HTTPClient: &http.Client{},
+		HTTPClient: &http.Client{Timeout: DefaultTimeout},
 	}
 }
 
@@ -135,9 +138,13 @@ func (c *Client) Resolve(secid string) (*Response, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	limited := io.LimitReader(resp.Body, MaxResponseBytes+1)
+	body, err := io.ReadAll(limited)
 	if err != nil {
 		return nil, fmt.Errorf("reading response: %w", err)
+	}
+	if len(body) > MaxResponseBytes {
+		return nil, fmt.Errorf("response exceeds %d byte limit", MaxResponseBytes)
 	}
 
 	var result Response

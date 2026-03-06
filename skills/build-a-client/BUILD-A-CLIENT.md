@@ -196,15 +196,23 @@ Your client should:
 8. **Handle empty results** — `results` can be `[]` on not_found/error
 9. **Expose the `message` field** — it contains guidance on not_found/error
 10. **Support CLI mode** — accept a SecID string as a command-line argument, print the best URL
+11. **Set a request timeout** — 30 seconds. Prevents the client from hanging indefinitely on unresponsive servers or network issues
+12. **Limit response body size** — 10 MB. The API returns small JSON responses (typically 1–5 KB), but if the client is pointed at a custom `base_url`, an unbounded read is a memory exhaustion risk. Read at most 10 MB and reject anything larger
 
 ## Minimal Example (pseudocode)
 
 ```
+TIMEOUT = 30 seconds
+MAX_RESPONSE = 10 MB
+
 function resolve(secid_string):
     encoded = secid_string.replace("#", "%23")
     url = BASE_URL + "/api/v1/resolve?secid=" + encoded
-    response = http_get(url)
-    json = parse_json(response.body)
+    response = http_get(url, timeout=TIMEOUT)
+    body = response.read(MAX_RESPONSE + 1)
+    if len(body) > MAX_RESPONSE:
+        return error("Response exceeds 10 MB limit")
+    json = parse_json(body)
     return {
         query: json.secid_query,
         status: json.status,

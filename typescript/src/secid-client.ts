@@ -1,8 +1,7 @@
-#!/usr/bin/env -S npx tsx
 /**
  * SecID client — resolve security identifiers to URLs.
  *
- * Single file, zero dependencies (fetch only). Copy and use.
+ * Zero runtime dependencies (fetch only).
  *
  * SecID is a universal grammar for security knowledge:
  *     secid:type/namespace/name[@version]#subpath
@@ -12,18 +11,18 @@
  * IMPORTANT: The # character in SecID strings must be encoded as %23 in the
  * URL query parameter. This is the #1 failure mode for new clients.
  *
- * Usage as library:
- *     import { SecIDClient } from "./secid-client.ts";
+ * Usage:
+ *     import { SecIDClient } from "secid";
  *     const client = new SecIDClient();
  *     const response = await client.resolve("secid:advisory/mitre.org/cve#CVE-2021-44228");
  *     console.log(response.bestUrl);
- *
- * Usage as CLI:
- *     npx tsx secid-client.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"
- *     npx tsx secid-client.ts --json "secid:advisory/mitre.org/cve#CVE-2021-44228"
  */
 
+export const VERSION = "0.1.0";
+
 const DEFAULT_BASE_URL = "https://secid.cloudsecurityalliance.org";
+const DEFAULT_TIMEOUT_MS = 30_000; // 30 seconds
+const MAX_RESPONSE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 /** A single result that resolved to a URL. */
 export interface ResolutionResult {
@@ -77,29 +76,30 @@ export class SecIDResponse {
 
   /** Only results with weight + url, sorted by weight descending. */
   get resolutionResults(): ResolutionResult[] {
-    return (this.results as Record<string, unknown>[])
-      .filter((r): r is ResolutionResult & Record<string, unknown> =>
-        "weight" in r && "url" in r
-      )
+    return this.results
+      .filter((r): r is ResolutionResult => "weight" in r && "url" in r)
       .sort((a, b) => b.weight - a.weight);
   }
 
   /** Only results with data (registry/browsing info). */
   get registryResults(): RegistryResult[] {
-    return (this.results as Record<string, unknown>[])
-      .filter((r): r is RegistryResult & Record<string, unknown> => "data" in r);
+    return this.results
+      .filter((r): r is RegistryResult => "data" in r);
   }
 }
 
 /** HTTP client for the SecID resolve API. */
 export class SecIDClient {
   private readonly baseUrl: string;
+  private readonly timeoutMs: number;
 
   /**
    * @param baseUrl - API base URL. Defaults to the public SecID service.
+   * @param timeoutMs - Request timeout in milliseconds. Defaults to 30 seconds.
    */
-  constructor(baseUrl: string = DEFAULT_BASE_URL) {
+  constructor(baseUrl: string = DEFAULT_BASE_URL, timeoutMs: number = DEFAULT_TIMEOUT_MS) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
+    this.timeoutMs = timeoutMs;
   }
 
   /**
@@ -120,14 +120,37 @@ export class SecIDClient {
           Accept: "application/json",
           "User-Agent": "secid-typescript-client/1.0",
         },
+        signal: AbortSignal.timeout(this.timeoutMs),
       });
-      data = (await resp.json()) as Record<string, unknown>;
+      const contentLength = resp.headers.get("content-length");
+      if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_BYTES) {
+        return new SecIDResponse({
+          secid_query: secid,
+          status: "error",
+          results: [],
+          message: `Response exceeds ${MAX_RESPONSE_BYTES} byte limit`,
+        });
+      }
+      const body = await resp.text();
+      if (body.length > MAX_RESPONSE_BYTES) {
+        return new SecIDResponse({
+          secid_query: secid,
+          status: "error",
+          results: [],
+          message: `Response exceeds ${MAX_RESPONSE_BYTES} byte limit`,
+        });
+      }
+      data = JSON.parse(body) as Record<string, unknown>;
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const prefix = err instanceof DOMException && err.name === "TimeoutError"
+        ? "Request timed out"
+        : "Connection error";
       return new SecIDResponse({
         secid_query: secid,
         status: "error",
         results: [],
-        message: `Connection error: ${err instanceof Error ? err.message : String(err)}`,
+        message: `${prefix}: ${msg}`,
       });
     }
 
@@ -157,74 +180,4 @@ export class SecIDClient {
   async lookup(type: string, identifier: string): Promise<SecIDResponse> {
     return this.resolve(`secid:${type}/${identifier}`);
   }
-}
-
-// ── CLI ──
-
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-
-  if (args.length === 0 || args.includes("-h") || args.includes("--help")) {
-    console.log("Usage: secid-client.ts [--json] <secid>");
-    console.log();
-    console.log("Examples:");
-    console.log('  secid-client.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"');
-    console.log('  secid-client.ts --json "secid:advisory/mitre.org/cve#CVE-2021-44228"');
-    console.log('  secid-client.ts "secid:advisory/CVE-2021-44228"');
-    process.exit(0);
-  }
-
-  const jsonMode = args.includes("--json");
-  const secid = args.filter((a) => a !== "--json")[0];
-  if (!secid) {
-    console.error("Error: no SecID provided");
-    process.exit(1);
-  }
-
-  const client = new SecIDClient();
-  const response = await client.resolve(secid);
-
-  if (jsonMode) {
-    console.log(JSON.stringify({
-      secid_query: response.secidQuery,
-      status: response.status,
-      results: response.results,
-      message: response.message ?? null,
-    }, null, 2));
-  } else if (response.status === "found" || response.status === "corrected") {
-    const url = response.bestUrl;
-    if (url) {
-      if (response.wasCorrected) {
-        const corrected = (response.results[0] as Record<string, unknown>)?.secid ?? "";
-        console.error(`(corrected to: ${corrected})`);
-      }
-      console.log(url);
-    } else {
-      for (const r of response.registryResults) {
-        console.log(JSON.stringify(r, null, 2));
-      }
-    }
-  } else if (response.status === "related") {
-    for (const r of response.results) {
-      console.log(JSON.stringify(r, null, 2));
-    }
-  } else {
-    const msg = response.message ?? "No results";
-    console.error(`${response.status}: ${msg}`);
-    process.exit(1);
-  }
-}
-
-// Run CLI if executed directly
-const isMain =
-  typeof process !== "undefined" &&
-  process.argv[1] &&
-  (process.argv[1].endsWith("secid-client.ts") ||
-    process.argv[1].endsWith("secid-client.js"));
-
-if (isMain) {
-  main().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
 }
