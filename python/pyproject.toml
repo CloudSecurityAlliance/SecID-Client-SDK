@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "secid"
-version = "0.1.0"
+version = "1.0.0"
 description = "Resolve security identifiers to URLs using the SecID API"
 readme = "README.md"
 license = "Apache-2.0"

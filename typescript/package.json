@@ -1,6 +1,6 @@
 {
   "name": "secid",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Resolve security identifiers to URLs using the SecID API",
   "type": "module",
   "exports": {
