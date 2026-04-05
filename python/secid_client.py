@@ -151,7 +151,7 @@ class SecIDClient:
         Equivalent to resolve(f"secid:{type}/{identifier}").
 
         Args:
-            type: SecID type (advisory, weakness, ttp, control, capability, disclosure, regulation, entity, reference).
+            type: SecID type (advisory, weakness, ttp, control, capability, methodology, disclosure, regulation, entity, reference).
             identifier: The identifier to search for, e.g. "CVE-2021-44228".
         """
         return self.resolve(f"secid:{type}/{identifier}")
