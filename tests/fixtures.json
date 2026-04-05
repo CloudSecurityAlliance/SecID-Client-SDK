@@ -240,7 +240,7 @@
           "secid_query": "secid:notavalidtype/foo.com/bar",
           "status": "not_found",
           "results": [],
-          "message": "Unknown type 'notavalidtype'. Valid types: advisory, weakness, ttp, control, regulation, entity, reference"
+          "message": "Unknown type 'notavalidtype'. Valid types: advisory, weakness, ttp, control, capability, disclosure, regulation, entity, reference"
         }
       },
       "expected": {
@@ -249,7 +249,7 @@
         "was_corrected": false,
         "resolution_result_count": 0,
         "registry_result_count": 0,
-        "message": "Unknown type 'notavalidtype'. Valid types: advisory, weakness, ttp, control, regulation, entity, reference"
+        "message": "Unknown type 'notavalidtype'. Valid types: advisory, weakness, ttp, control, capability, disclosure, regulation, entity, reference"
       }
     },
     {

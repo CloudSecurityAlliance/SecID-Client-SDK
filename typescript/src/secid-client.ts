@@ -208,7 +208,7 @@ export class SecIDClient {
    *
    * Equivalent to resolve(`secid:${type}/${identifier}`).
    *
-   * @param type - SecID type (advisory, weakness, ttp, control, regulation, entity, reference).
+   * @param type - SecID type (advisory, weakness, ttp, control, capability, disclosure, regulation, entity, reference).
    * @param identifier - The identifier to search for, e.g. "CVE-2021-44228".
    */
   async lookup(type: string, identifier: string): Promise<SecIDResponse> {

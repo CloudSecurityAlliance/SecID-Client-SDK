@@ -46,6 +46,12 @@ console.log(response.registryResults);   // browsing/discovery data
 
 // Cross-source search
 const results = await client.lookup("advisory", "CVE-2021-44228");
+
+// Capability lookup (product security features)
+const cap = await client.resolve("secid:capability/amazon.com/aws/s3#default-encryption");
+
+// Disclosure lookup (who to report vulnerabilities to)
+const disc = await client.resolve("secid:disclosure/redhat.com/cna");
 ```
 
 ## SecID Format
@@ -60,6 +66,8 @@ secid:type/namespace/name[@version]#subpath
 | `weakness` | Abstract flaw patterns (CWE, OWASP Top 10) |
 | `ttp` | Adversary techniques (ATT&CK, CAPEC) |
 | `control` | Security requirements (NIST CSF, ISO 27001) |
+| `capability` | Product security features and capabilities |
+| `disclosure` | Vulnerability disclosure programs and reporting channels |
 | `regulation` | Laws (GDPR, HIPAA) |
 | `entity` | Organizations, products, services |
 | `reference` | Documents, research (arXiv, DOI, RFC) |

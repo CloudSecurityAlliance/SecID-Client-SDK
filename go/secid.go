@@ -164,6 +164,7 @@ func (c *Client) BestURL(secid string) (string, error) {
 }
 
 // Lookup performs a cross-source search: finds an identifier across all sources of a type.
+// typ is a SecID type (advisory, weakness, ttp, control, capability, disclosure, regulation, entity, reference).
 // Equivalent to Resolve(fmt.Sprintf("secid:%s/%s", typ, identifier)).
 func (c *Client) Lookup(typ, identifier string) (*Response, error) {
 	return c.Resolve(fmt.Sprintf("secid:%s/%s", typ, identifier))

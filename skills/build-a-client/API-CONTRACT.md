@@ -231,6 +231,8 @@ secid:type/namespace/name[@version][?qualifiers][#subpath[@item_version][?qualif
 | `weakness` | Abstract flaw patterns (CWE, OWASP Top 10) |
 | `ttp` | Adversary techniques (ATT&CK, ATLAS, CAPEC) |
 | `control` | Security requirements (NIST CSF, ISO 27001) |
+| `capability` | Product security features and capabilities |
+| `disclosure` | Vulnerability disclosure programs and reporting channels |
 | `regulation` | Laws and legal requirements (GDPR, HIPAA) |
 | `entity` | Organizations, products, services |
 | `reference` | Documents, research, identifier systems (arXiv, DOI, RFC) |
