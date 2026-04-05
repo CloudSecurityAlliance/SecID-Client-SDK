@@ -52,6 +52,9 @@ const cap = await client.resolve("secid:capability/amazon.com/aws/s3#default-enc
 
 // Disclosure lookup (who to report vulnerabilities to)
 const disc = await client.resolve("secid:disclosure/redhat.com/cna");
+
+// Look up a scoring methodology
+const cvss = await client.resolve("secid:methodology/first.org/cvss@4.0");
 ```
 
 ## SecID Format
@@ -67,6 +70,7 @@ secid:type/namespace/name[@version]#subpath
 | `ttp` | Adversary techniques (ATT&CK, CAPEC) |
 | `control` | Security requirements (NIST CSF, ISO 27001) |
 | `capability` | Product security features and capabilities |
+| `methodology` | Formal processes for producing security analysis |
 | `disclosure` | Vulnerability disclosure programs and reporting channels |
 | `regulation` | Laws (GDPR, HIPAA) |
 | `entity` | Organizations, products, services |
