@@ -46,6 +46,10 @@ class SecIDResponse:
         secid_query: The query string echoed back (decoded form).
         status: One of: found, corrected, related, not_found, error.
         results: List of result dicts — either resolution or registry type.
+            Resolution results have: secid, weight, url, and optional
+            content_type, parsability ("structured"/"scraped"), schema
+            (SecID reference), parsing_instructions (SecID reference),
+            auth (free-text).
         message: Guidance text on not_found/error, None otherwise.
     """
 

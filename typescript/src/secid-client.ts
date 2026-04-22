@@ -63,6 +63,11 @@ export interface ResolutionResult {
   secid: string;
   weight: number;
   url: string;
+  content_type?: string;        // MIME type (e.g., "text/html", "application/json")
+  parsability?: string;          // "structured" or "scraped"
+  schema?: string;               // SecID reference to data schema
+  parsing_instructions?: string; // SecID reference to parsing instruction doc
+  auth?: string;                 // Free-text auth description
 }
 
 /** A single result containing registry/browsing data. */

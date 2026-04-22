@@ -52,10 +52,15 @@ type Response struct {
 // Check HasWeight() to determine if this is a resolution result (weight + url)
 // or a registry result (data).
 type Result struct {
-	SecID  string                 `json:"secid"`
-	Weight *int                   `json:"weight,omitempty"`
-	URL    string                 `json:"url,omitempty"`
-	Data   map[string]interface{} `json:"data,omitempty"`
+	SecID              string                 `json:"secid"`
+	Weight             *int                   `json:"weight,omitempty"`
+	URL                string                 `json:"url,omitempty"`
+	ContentType        string                 `json:"content_type,omitempty"`        // MIME type
+	Parsability        string                 `json:"parsability,omitempty"`          // "structured" or "scraped"
+	Schema             string                 `json:"schema,omitempty"`               // SecID reference to data schema
+	ParseInstructions  string                 `json:"parsing_instructions,omitempty"` // SecID reference to parsing doc
+	Auth               string                 `json:"auth,omitempty"`                 // Free-text auth description
+	Data               map[string]interface{} `json:"data,omitempty"`
 }
 
 // HasWeight returns true if this is a resolution result (has weight + url).
