@@ -32,6 +32,8 @@ Two result types:
 - **Resolution:** `{secid, weight, url}` — item resolved to URL(s)
 - **Registry:** `{secid, data}` — browsing/discovery info
 
+Resolution results may also include optional format metadata: `content_type` (MIME type), `parsability` (`structured` or `scraped`), `schema` (SecID reference to data schema), `parsing_instructions` (SecID reference to parsing guide), `auth` (free-text access description). These are absent when the registry hasn't documented them yet.
+
 ## File Purposes
 
 | Directory | Purpose | Edit frequency |

@@ -82,6 +82,8 @@ One endpoint: `GET /api/v1/resolve?secid={encoded_secid}`
 
 The `#` character must be encoded as `%23` — the client handles this automatically.
 
+Resolution results may include optional format metadata fields: `content_type`, `parsability`, `schema`, `parsing_instructions`, and `auth`. These describe the data format at the resolved URL and are present only when the registry has documented them.
+
 ## Links
 
 - [SecID Registry & Spec](https://github.com/CloudSecurityAlliance/SecID)

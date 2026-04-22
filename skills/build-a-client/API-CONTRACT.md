@@ -105,6 +105,11 @@ Present when the query resolved to specific URL(s):
 | `secid` | string | Fully-qualified SecID for this result |
 | `weight` | integer | Match quality: 100 (authoritative), 80 (high-quality secondary), 50 (indirect/alternative) |
 | `url` | string | Resolved URL where the resource can be found |
+| `content_type` | string (optional) | MIME type of the resource at the URL (e.g., `application/json`, `text/html`) |
+| `parsability` | string (optional) | Whether the resource is `structured` (machine-readable) or `scraped` (requires HTML parsing) |
+| `schema` | string (optional) | SecID reference to the data schema for the resource (e.g., `secid:reference/mitre.org/cvelistV5`) |
+| `parsing_instructions` | string (optional) | SecID reference to a parsing guide for the resource |
+| `auth` | string (optional) | Free-text description of access requirements (e.g., `"API key required"`, `"public"`) |
 
 #### Registry Result Object
 

@@ -222,6 +222,28 @@ for result in response.results:
     add_to_dashboard(namespace, result.url, result.weight)
 ```
 
+## Format Metadata
+
+Resolution results may include optional metadata describing the data format at the resolved URL. These fields are present only when the registry has documented them for the source:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `content_type` | string | MIME type of the resource (e.g., `application/json`, `text/html`) |
+| `parsability` | string | `structured` (machine-readable) or `scraped` (requires HTML parsing) |
+| `schema` | string | SecID reference to the data schema (e.g., `secid:reference/mitre.org/cvelistV5`) |
+| `parsing_instructions` | string | SecID reference to a parsing guide for the resource |
+| `auth` | string | Free-text description of access requirements (e.g., `"API key required"`, `"public"`) |
+
+**How to handle:** Check if each field is present before using it. Most results will not include format metadata — its absence simply means the registry hasn't documented it yet. When present, these fields help clients decide how to fetch and process the resource (e.g., choosing an API endpoint over an HTML page, or knowing that authentication is required).
+
+```
+result = response.results[0]
+if result.content_type and result.content_type.startswith("application/json"):
+    # Machine-readable JSON — parse directly
+elif result.parsability == "scraped":
+    # HTML page — will need scraping
+```
+
 ## Edge Cases
 
 1. **Empty results array with `found` status:** Shouldn't happen, but handle gracefully — treat as `not_found`
