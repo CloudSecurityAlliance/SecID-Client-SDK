@@ -1,3 +1,10 @@
+```
+project_tracker_base: CINO Project Tracker:appf7fRQUvY9Iy7sL
+project_tracker_table: Projects:tblchmbxSAavvJKaY
+project_tracker_record: SecID-Client-SDK:rec3FSe9lnGXjRaVK
+project_source: github:CloudSecurityAlliance-Internal/CINO-Projects/projects/SecID-Client-SDK
+```
+
 # SecID-Client-SDK
 
 **This is not a traditional SDK.** There is no package to install.
