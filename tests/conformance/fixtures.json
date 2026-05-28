@@ -1,0 +1,221 @@
+{
+  "suite_version": "1.0",
+  "description": "SecID resolver conformance fixtures — canonical test cases that every implementation (SecID-Service Worker, SecID-Server-API Python/TS/Go) must satisfy. Behavioral assertions are the hard contract; strict assertions are optional pin-downs run with --strict.",
+  "tests": [
+    {
+      "name": "resolve-cve-2021-44228",
+      "description": "Canonical CVE record — Log4Shell. Tests the most-common advisory resolution path: namespace-qualified SecID with subpath ID maps to a primary URL plus aggregated alternate sources.",
+      "category": "resolver/advisory/cve",
+      "input": {
+        "method": "GET",
+        "endpoint": "/api/v1/resolve",
+        "query": { "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228" }
+      },
+      "expected": {
+        "http_status": 200,
+        "behavioral": {
+          "response_status": "found",
+          "min_results": 1,
+          "must_have_paths": [
+            ["status"],
+            ["secid_query"],
+            ["results", 0, "secid"],
+            ["results", 0, "weight"],
+            ["results", 0, "url"]
+          ],
+          "must_not_have_paths": [
+            ["results", 0, "data"]
+          ],
+          "field_assertions": {
+            "secid_query": { "equals": "secid:advisory/mitre.org/cve#CVE-2021-44228" },
+            "results[0].url": { "regex": "^https://www\\.cve\\.org/CVERecord\\?id=CVE-2021-44228$" }
+          }
+        }
+      },
+      "variants": {
+        "with_data": {
+          "input_override": { "query": { "include_data": "true" } },
+          "behavioral": {
+            "must_have_paths": [
+              ["results", 0, "data"]
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "resolve-cwe-79",
+      "description": "Canonical weakness resolution — XSS (CWE-79). Single primary URL, no alternate sources.",
+      "category": "resolver/weakness/cwe",
+      "input": {
+        "method": "GET",
+        "endpoint": "/api/v1/resolve",
+        "query": { "secid": "secid:weakness/mitre.org/cwe#CWE-79" }
+      },
+      "expected": {
+        "http_status": 200,
+        "behavioral": {
+          "response_status": "found",
+          "min_results": 1,
+          "must_have_paths": [
+            ["results", 0, "url"]
+          ],
+          "field_assertions": {
+            "results[0].url": { "regex": "^https://cwe\\.mitre\\.org/data/definitions/79\\.html?$" }
+          }
+        }
+      }
+    },
+    {
+      "name": "resolve-attck-t1059-003",
+      "description": "ATT&CK technique with subpath that contains a dot (T1059.003 — PowerShell). Verifies dots in subpath IDs are preserved and not normalized away.",
+      "category": "resolver/ttp/attack",
+      "input": {
+        "method": "GET",
+        "endpoint": "/api/v1/resolve",
+        "query": { "secid": "secid:ttp/mitre.org/attack#T1059.003" }
+      },
+      "expected": {
+        "http_status": 200,
+        "behavioral": {
+          "response_status": "found",
+          "min_results": 1,
+          "field_assertions": {
+            "results[0].url": { "contains": "T1059/003" }
+          }
+        }
+      }
+    },
+    {
+      "name": "resolve-ccm-iam-12",
+      "description": "Versioned control with no per-item URL — CCM @ v4.0 IAM-12. Verifies version handling AND description-only results: when no URL exists, the response carries a 'data' field with descriptive context. This is the canonical contract — 'data' for description-only results, no 'data' for URL-bearing results.",
+      "category": "resolver/control/ccm-versioned",
+      "input": {
+        "method": "GET",
+        "endpoint": "/api/v1/resolve",
+        "query": { "secid": "secid:control/cloudsecurityalliance.org/ccm@4.0#IAM-12" }
+      },
+      "expected": {
+        "http_status": 200,
+        "behavioral": {
+          "response_status": "found",
+          "min_results": 1,
+          "must_have_paths": [
+            ["results", 0, "data"]
+          ]
+        }
+      }
+    },
+    {
+      "name": "resolve-cvss-40",
+      "description": "Versioned methodology (CVSS @ 4.0). Verifies version handling for methodologies and that the response includes contextual data for description-style entries.",
+      "category": "resolver/methodology/versioned",
+      "input": {
+        "method": "GET",
+        "endpoint": "/api/v1/resolve",
+        "query": { "secid": "secid:methodology/first.org/cvss@4.0" }
+      },
+      "expected": {
+        "http_status": 200,
+        "behavioral": {
+          "response_status": "found",
+          "min_results": 1
+        }
+      }
+    },
+    {
+      "name": "resolve-cve-cross-source",
+      "description": "Cross-source search — bare type with no namespace. Should aggregate matches from every advisory namespace that recognizes the CVE-2021-44228 pattern.",
+      "category": "resolver/advisory/cross-source",
+      "input": {
+        "method": "GET",
+        "endpoint": "/api/v1/resolve",
+        "query": { "secid": "secid:advisory/CVE-2021-44228" }
+      },
+      "expected": {
+        "http_status": 200,
+        "behavioral": {
+          "response_status": "found",
+          "min_results": 5
+        }
+      }
+    },
+    {
+      "name": "resolve-aiid-1",
+      "description": "Incident subtype — AIID incident 1. Verifies the incident subtype tag (added 2026-05-27) is exposed AND that the resolution to incidentdatabase.ai works.",
+      "category": "resolver/advisory/incident",
+      "input": {
+        "method": "GET",
+        "endpoint": "/api/v1/resolve",
+        "query": { "secid": "secid:advisory/partnershiponai.org/aiid#1" }
+      },
+      "expected": {
+        "http_status": 200,
+        "behavioral": {
+          "response_status": "found",
+          "min_results": 1,
+          "field_assertions": {
+            "results[0].url": { "regex": "^https://incidentdatabase\\.ai/cite/1/?$" }
+          }
+        }
+      }
+    },
+    {
+      "name": "resolve-not-found",
+      "description": "Unknown namespace — confirms 'not_found' status and 0 results. Tests the 'helpful over correct' contract: never an error, always an envelope.",
+      "category": "resolver/error-paths/not-found",
+      "input": {
+        "method": "GET",
+        "endpoint": "/api/v1/resolve",
+        "query": { "secid": "secid:advisory/notexist.example.com/foo" }
+      },
+      "expected": {
+        "http_status": 200,
+        "behavioral": {
+          "response_status": "not_found",
+          "min_results": 0,
+          "max_results": 0
+        }
+      }
+    },
+    {
+      "name": "list-advisory-namespaces",
+      "description": "Bare type listing — secid:advisory should return descriptive metadata about the advisory type. Tests the type-level discovery path.",
+      "category": "resolver/discovery/bare-type",
+      "input": {
+        "method": "GET",
+        "endpoint": "/api/v1/resolve",
+        "query": { "secid": "secid:advisory" }
+      },
+      "expected": {
+        "http_status": 200,
+        "behavioral": {
+          "response_status": "found",
+          "min_results": 1
+        }
+      }
+    },
+    {
+      "name": "list-types",
+      "description": "GET /api/v1/types — returns all 10 SecID types with their descriptions and subtypes. The canonical type-list endpoint.",
+      "category": "discovery/types-endpoint",
+      "input": {
+        "method": "GET",
+        "endpoint": "/api/v1/types",
+        "query": {}
+      },
+      "expected": {
+        "http_status": 200,
+        "behavioral": {
+          "must_have_paths": [
+            ["types"],
+            ["types", 0, "type"]
+          ],
+          "field_assertions": {
+            "types[0].type": { "in": ["advisory", "capability", "control", "disclosure", "entity", "methodology", "reference", "regulation", "ttp", "weakness"] }
+          }
+        }
+      }
+    }
+  ]
+}

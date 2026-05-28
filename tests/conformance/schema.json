@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://secid.cloudsecurityalliance.org/schemas/conformance-fixture.schema.json",
+  "title": "SecID Conformance Test Fixture Suite",
+  "description": "JSON Schema for the SecID resolver conformance test fixture format. A fixture suite is a list of test cases; each case describes an HTTP request to issue against a resolver and the expected response shape. Behavioral assertions are the minimum contract; strict assertions optionally pin byte-identical output.",
+  "type": "object",
+  "required": ["suite_version", "tests"],
+  "properties": {
+    "suite_version": {
+      "type": "string",
+      "description": "Suite format version. Major version changes signal breaking format changes; minor for additions."
+    },
+    "description": {
+      "type": "string",
+      "description": "Free-text description of what this suite covers."
+    },
+    "tests": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/test" }
+    }
+  },
+  "$defs": {
+    "test": {
+      "type": "object",
+      "required": ["name", "category", "input", "expected"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Unique kebab-case identifier for this test case. Used as the test ID by the harness."
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what this test verifies."
+        },
+        "category": {
+          "type": "string",
+          "description": "Hierarchical category for filtering and reporting (e.g., 'resolver/advisory/cve')."
+        },
+        "input": { "$ref": "#/$defs/input" },
+        "expected": { "$ref": "#/$defs/expected" },
+        "variants": {
+          "type": "object",
+          "description": "Named variants of this test. Most common: 'with_data' for verbose-mode tests. Variants inherit input from the parent test and override specific fields.",
+          "additionalProperties": { "$ref": "#/$defs/variant" }
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "required": ["method", "endpoint"],
+      "properties": {
+        "method": { "enum": ["GET", "POST"] },
+        "endpoint": {
+          "type": "string",
+          "description": "Path under the target resolver's base URL (e.g., '/api/v1/resolve')."
+        },
+        "query": {
+          "type": "object",
+          "description": "Query-string parameters as key-value strings.",
+          "additionalProperties": { "type": "string" }
+        },
+        "headers": {
+          "type": "object",
+          "description": "Additional HTTP request headers.",
+          "additionalProperties": { "type": "string" }
+        },
+        "body": {
+          "type": "object",
+          "description": "Request body (POST only)."
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "required": ["http_status"],
+      "properties": {
+        "http_status": {
+          "type": "integer",
+          "description": "Expected HTTP status code."
+        },
+        "behavioral": { "$ref": "#/$defs/behavioral" },
+        "strict": { "$ref": "#/$defs/strict" }
+      }
+    },
+    "behavioral": {
+      "type": "object",
+      "description": "Behavioral assertions — the minimum contract every conforming resolver must satisfy. These are the hard failures.",
+      "properties": {
+        "response_status": {
+          "type": "string",
+          "description": "Expected value of the top-level 'status' field in the response (e.g., 'found', 'not_found', 'corrected')."
+        },
+        "min_results": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum number of results expected."
+        },
+        "max_results": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum number of results expected. Omit for unbounded."
+        },
+        "must_have_paths": {
+          "type": "array",
+          "description": "JSON-pointer-like paths that MUST be present in the response. Each path is an array of keys/indices.",
+          "items": {
+            "type": "array",
+            "items": { "type": ["string", "integer"] }
+          }
+        },
+        "must_not_have_paths": {
+          "type": "array",
+          "description": "Paths that MUST NOT be present in the response. Useful for asserting absence (e.g., no 'data' field by default).",
+          "items": {
+            "type": "array",
+            "items": { "type": ["string", "integer"] }
+          }
+        },
+        "field_assertions": {
+          "type": "object",
+          "description": "Per-field assertions, keyed by JSON-pointer-like path strings (e.g., 'results[0].url').",
+          "additionalProperties": { "$ref": "#/$defs/fieldAssertion" }
+        }
+      }
+    },
+    "fieldAssertion": {
+      "type": "object",
+      "description": "An assertion on a specific field's value. Exactly one of regex/equals/contains/in must be present.",
+      "oneOf": [
+        {
+          "required": ["regex"],
+          "properties": {
+            "regex": { "type": "string", "description": "ECMA regex the value must match." }
+          }
+        },
+        {
+          "required": ["equals"],
+          "properties": {
+            "equals": { "description": "Exact JSON value the field must equal." }
+          }
+        },
+        {
+          "required": ["contains"],
+          "properties": {
+            "contains": { "type": "string", "description": "Substring the value must contain (string fields only)." }
+          }
+        },
+        {
+          "required": ["in"],
+          "properties": {
+            "in": {
+              "type": "array",
+              "description": "Set of acceptable values. Field must equal one of them."
+            }
+          }
+        }
+      ]
+    },
+    "strict": {
+      "type": "object",
+      "description": "Strict assertions — full canonical response shape. Only run when the harness is invoked with --strict.",
+      "properties": {
+        "body": {
+          "description": "Full expected response body. Compared with key-order-insensitive deep equality."
+        }
+      }
+    },
+    "variant": {
+      "type": "object",
+      "description": "A named variation of the parent test, e.g., 'with_data' to test the ?include_data=true mode. Inherits the parent's input and expected, with the fields below overriding.",
+      "properties": {
+        "input_override": {
+          "type": "object",
+          "description": "Fields to merge into the parent's input. For query overrides, the merged value wins."
+        },
+        "behavioral": { "$ref": "#/$defs/behavioral" },
+        "strict": { "$ref": "#/$defs/strict" }
+      }
+    }
+  }
+}
