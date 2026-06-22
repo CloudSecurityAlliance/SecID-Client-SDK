@@ -25,9 +25,9 @@ CORRECT: /api/v1/resolve?secid=secid:advisory/mitre.org/cve%23CVE-2021-44228
 WRONG:   /api/v1/resolve?secid=secid:advisory/mitre.org/cve#CVE-2021-44228
 ```
 
-**Implementation:** Replace `#` with `%23` in the SecID string before appending it to the URL. Or use your language's URL-encoding, but verify it encodes `#` — some URL encoders treat `#` as a fragment separator and don't encode it.
+**Implementation:** Use your language's query-parameter encoder on the whole SecID (`urllib.parse.quote(s, safe="")`, `encodeURIComponent`, `url.QueryEscape`). Do NOT hand-roll `replace("#", "%23")` — it leaves `&`, `?`, spaces, and other reserved characters unencoded, which corrupts the query. A correct encoder handles `#` (and everything else) for you.
 
-This is the #1 failure mode for new clients.
+Encoding `#` is the historical #1 failure mode for new clients; full query-encoding closes it and the other reserved-character bugs at once.
 
 ## Request Format
 
@@ -36,7 +36,7 @@ GET /api/v1/resolve?secid={secid_with_hash_encoded}
 Accept: application/json
 ```
 
-The `secid` parameter value must have `#` encoded as `%23`. All other characters can be sent as-is (the server handles further decoding).
+The `secid` parameter value must be query-encoded as a whole (the encoder turns `#` into `%23`, `&` into `%26`, and so on). The server URL-decodes the parameter, so full encoding is safe.
 
 **No request body.** It's a GET with a query parameter. The server returns JSON with `Content-Type: application/json`.
 
@@ -182,22 +182,31 @@ The same endpoint handles different levels of specificity:
 
 Deeper queries resolve to URLs. Shallower queries browse the registry.
 
+## Treat the Response as Untrusted
+
+The resolver can be a third-party, federated, or man-in-the-middled endpoint — its response is attacker-influenced data, not trusted input. A hardened client:
+
+- **Validates URL schemes.** Before returning a `url` from `best_url` (or opening it), confirm the scheme is `http` or `https`. Reject `javascript:`, `data:`, `file:`, and relative/scheme-less URLs — a hostile resolver can return any of these as the highest-weight result.
+- **Sanitizes terminal output.** Strip C0/C1 control characters (including ESC, `0x1B`) from any server-controlled string — `url`, `message`, the corrected SecID — before printing it. Otherwise a crafted response can inject ANSI escape sequences into the user's terminal.
+- **Guards the JSON parse.** A non-JSON or oversized body must produce a clean error, never an unhandled exception.
+
 ## Implementation Checklist
 
 Your client should:
 
-1. **Encode `#` as `%23`** in the query parameter
+1. **Query-encode the whole SecID** (turns `#` into `%23`) — not a hand-rolled `#`→`%23` replace
 2. **Accept any HTTP 200 response** — the status field tells you what happened, not the HTTP code (HTTP 400 only for truly unparseable requests)
 3. **Parse the JSON envelope** with all four fields
 4. **Handle all 5 status values** — at minimum, distinguish found/corrected (use results) from related/not_found/error (show guidance)
 5. **Distinguish result types** — check for `weight`+`url` vs `data`
 6. **Sort resolution results by weight descending** — highest weight first
-7. **Provide a "best URL" helper** — returns the highest-weight URL or null
+7. **Provide a "best URL" helper** — returns the highest-weight URL or null, after validating its scheme is `http`/`https` (reject `javascript:`/`data:`/`file:`/relative — the response is untrusted)
 8. **Handle empty results** — `results` can be `[]` on not_found/error
 9. **Expose the `message` field** — it contains guidance on not_found/error
 10. **Support CLI mode** — accept a SecID string as a command-line argument, print the best URL
 11. **Set a request timeout** — 30 seconds. Prevents the client from hanging indefinitely on unresponsive servers or network issues
 12. **Limit response body size** — 10 MB. The API returns small JSON responses (typically 1–5 KB), but if the client is pointed at a custom `base_url`, an unbounded read is a memory exhaustion risk. Read at most 10 MB and reject anything larger
+13. **Treat the response as untrusted** — validate returned URL schemes and strip control characters from server-controlled strings before terminal output (see "Treat the Response as Untrusted" above)
 
 ## Minimal Example (pseudocode)
 
@@ -206,7 +215,7 @@ TIMEOUT = 30 seconds
 MAX_RESPONSE = 10 MB
 
 function resolve(secid_string):
-    encoded = secid_string.replace("#", "%23")
+    encoded = url_query_encode(secid_string)   # NOT a "#"->"%23" replace
     url = BASE_URL + "/api/v1/resolve?secid=" + encoded
     response = http_get(url, timeout=TIMEOUT)
     body = response.read(MAX_RESPONSE + 1)
@@ -225,6 +234,8 @@ function best_url(secid_string):
     if result.status in ["found", "corrected"]:
         urls = [r for r in result.results if r.weight exists]
         urls.sort_by(weight, descending)
-        return urls[0].url if urls else null
+        if not urls: return null
+        # Untrusted response: only surface http(s) URLs.
+        return urls[0].url if scheme_of(urls[0].url) in ["http", "https"] else null
     return null
 ```

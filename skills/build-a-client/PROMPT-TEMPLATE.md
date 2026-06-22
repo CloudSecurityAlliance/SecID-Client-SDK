@@ -24,11 +24,11 @@ Examples:
 
 **No auth.** No API keys, no tokens, no special headers.
 
-**Critical encoding rule:** The `#` character in SecID strings must be encoded as `%23` in the URL query parameter. This is the #1 failure mode.
+**Critical encoding rule:** Fully query-encode the entire SecID with your language's standard encoder (`urllib.parse.quote(s, safe="")`, `encodeURIComponent`, `url.QueryEscape`). A hand-rolled `#`→`%23` replace is NOT enough — it leaves `&`, `?`, spaces, and other reserved characters unencoded, which corrupts the query. A correct encoder turns `#` into `%23` for you and handles the rest. (Encoding `#` is the historical #1 failure mode; full-encoding closes it and the others at once.)
 
 ```
-CORRECT: ?secid=secid:advisory/mitre.org/cve%23CVE-2021-44228
-WRONG:   ?secid=secid:advisory/mitre.org/cve#CVE-2021-44228
+CORRECT: ?secid=secid%3Aadvisory%2Fmitre.org%2Fcve%23CVE-2021-44228
+WRONG:   ?secid=secid:advisory/mitre.org/cve#CVE-2021-44228   (# begins the URL fragment — the server never sees it)
 ```
 
 **Response envelope** (always this shape, HTTP 200 for all processed queries):
@@ -70,7 +70,7 @@ class SecIDClient:
     constructor(base_url = "https://secid.cloudsecurityalliance.org")
 
     resolve(secid: string) → SecIDResponse
-        # Encode # as %23, call API, return parsed response
+        # Fully query-encode the secid, call API, return parsed response
 
     best_url(secid: string) → string | null
         # Resolve, then return highest-weight URL from resolution results
@@ -87,7 +87,9 @@ class SecIDResponse:
     message: string | null
 
     property best_url → string | null
-        # Highest-weight URL from resolution results, or null
+        # Highest-weight URL from resolution results, or null.
+        # Validate the URL's scheme first (http/https only) — the resolver
+        # response is untrusted; reject javascript:/data:/file:/relative.
 
     property was_corrected → bool
         # True if status is "corrected"
@@ -117,7 +119,7 @@ not_found: No namespace 'totallyinvented.com' in the advisory registry.
 ### Implementation Requirements
 
 1. Single file, zero external dependencies
-2. `#` → `%23` encoding (CRITICAL — test this)
+2. **Full query-encoding of the SecID** via your standard encoder — NOT a `#`→`%23` string replace (CRITICAL — test this; verify it encodes `#`, `&`, and spaces)
 3. Handle all 5 status values
 4. Distinguish resolution results (weight+url) from registry results (data)
 5. Sort resolution results by weight descending
@@ -128,3 +130,4 @@ not_found: No namespace 'totallyinvented.com' in the advisory registry.
 10. Include docstrings explaining the encoding gotcha and status values
 11. **Set a 30-second request timeout** — prevents hanging on unresponsive servers
 12. **Limit response body to 10 MB** — read at most 10 MB and reject anything larger. Normal responses are 1–5 KB; this protects against memory exhaustion when the client is pointed at a custom base URL
+13. **Treat the resolver response as untrusted.** Validate any returned `url`'s scheme in `best_url` (allow `https`/`http` only; reject `javascript:`/`data:`/`file:`/relative). Strip control characters (C0/C1, incl. ESC `0x1B`) from server-controlled strings (`url`, `message`, corrected SecID) before printing them to a terminal — prevents ANSI-escape injection

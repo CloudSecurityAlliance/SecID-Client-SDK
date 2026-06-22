@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SecIDClient } from "./secid-client.js";
+import { SecIDClient, SecIDResponse } from "./secid-client.js";
 
 // ---------------------------------------------------------------------------
 // Load fixtures
@@ -229,4 +229,32 @@ describe("SecID Client (connection refused)", () => {
       assert.equal(resp.status, "error", "Expected error status on connection refused");
     });
   }
+});
+
+// Untrusted-response hardening (audit finding F-08): bestUrl must reject a
+// hostile-scheme URL from the resolver and only surface http(s).
+describe("bestUrl URL validation", () => {
+  it("rejects a javascript: URL from the resolver", () => {
+    const r = new SecIDResponse({
+      secid_query: "x", status: "found",
+      results: [{ secid: "x", weight: 100, url: "javascript:fetch('//evil')" }],
+    });
+    assert.equal(r.bestUrl, undefined);
+  });
+  it("rejects data:/file:/relative URLs", () => {
+    for (const url of ["data:text/html,x", "file:///etc/passwd", "//evil.example/x", "/relative"]) {
+      const r = new SecIDResponse({
+        secid_query: "x", status: "found",
+        results: [{ secid: "x", weight: 100, url }],
+      });
+      assert.equal(r.bestUrl, undefined, `${url} must be rejected`);
+    }
+  });
+  it("returns a valid https URL unchanged", () => {
+    const r = new SecIDResponse({
+      secid_query: "x", status: "found",
+      results: [{ secid: "x", weight: 100, url: "https://example.com/ok" }],
+    });
+    assert.equal(r.bestUrl, "https://example.com/ok");
+  });
 });
