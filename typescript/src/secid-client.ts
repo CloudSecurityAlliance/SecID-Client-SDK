@@ -12,7 +12,7 @@
  * URL query parameter. This is the #1 failure mode for new clients.
  *
  * Usage:
- *     import { SecIDClient } from "secid";
+ *     import { SecIDClient } from "@cloudsecurityalliance/secid";
  *     const client = new SecIDClient();
  *     const response = await client.resolve("secid:advisory/mitre.org/cve#CVE-2021-44228");
  *     console.log(response.bestUrl);

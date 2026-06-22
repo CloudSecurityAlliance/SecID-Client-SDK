@@ -13,8 +13,8 @@ The primary artifact here is **instructions that AI assistants follow to build c
 ### Path 1: Install from Package Registry
 
 ```bash
-pip install secid      # Python 3.9+
-npm install secid      # Node 18+
+pip install cloudsecurityalliance-secid      # Python 3.9+
+npm install @cloudsecurityalliance/secid     # Node 18+
 ```
 
 Then use as library or CLI:
@@ -29,10 +29,19 @@ client = SecIDClient()
 url = client.best_url("secid:advisory/mitre.org/cve#CVE-2021-44228")
 
 # TypeScript
-import { SecIDClient } from "secid";
+import { SecIDClient } from "@cloudsecurityalliance/secid";
 const client = new SecIDClient();
 const url = await client.bestUrl("secid:advisory/mitre.org/cve#CVE-2021-44228");
 ```
+
+> **Package naming (CSA convention).** Where the registry provides a namespace
+> (npm scopes, Go module paths), the package keeps a simple name under the org
+> namespace — `@cloudsecurityalliance/secid`, `github.com/CloudSecurityAlliance/…`.
+> Where the registry is flat (PyPI), the distribution name carries the org prefix:
+> `cloudsecurityalliance-secid` (default to the full `cloudsecurityalliance-`
+> prefix; fall back to `csa-` only when the name would otherwise be too long or
+> the registry constrains length). Import modules and CLI commands stay simple
+> (`secid_client`, the `secid` command) regardless.
 
 ### Path 2: AI-to-AI (MCP)
 
@@ -101,11 +110,11 @@ SecID-Client-SDK/
 │       ├── API-CONTRACT.md        # Formal API spec (request, response, encoding)
 │       ├── RESULT-HANDLING.md     # Statuses, weights, cross-source, versions
 │       └── PROMPT-TEMPLATE.md     # Copy-paste prompt for any language
-├── python/                        # pip install secid
+├── python/                        # pip install cloudsecurityalliance-secid
 │   ├── secid_client.py            # Python client — stdlib only
 │   ├── pyproject.toml             # Package config (hatchling)
 │   └── README.md                  # PyPI page
-├── typescript/                    # npm install secid
+├── typescript/                    # npm install @cloudsecurityalliance/secid
 │   ├── src/
 │   │   ├── secid-client.ts        # Library exports
 │   │   └── secid-cli.ts           # CLI entry point

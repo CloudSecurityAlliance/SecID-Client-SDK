@@ -9,7 +9,7 @@ SecID is a universal grammar for security knowledge — CVEs, CWEs, ATT&CK techn
 ## Install
 
 ```bash
-npm install secid
+npm install @cloudsecurityalliance/secid
 ```
 
 ## CLI
@@ -28,7 +28,7 @@ npx secid "secid:advisory/CVE-2021-44228"
 ## Library
 
 ```typescript
-import { SecIDClient } from "secid";
+import { SecIDClient } from "@cloudsecurityalliance/secid";
 
 const client = new SecIDClient();
 
