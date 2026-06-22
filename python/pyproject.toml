@@ -3,7 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "secid"
+# PyPI has a flat namespace, so the distribution name carries the org prefix.
+# The import module (secid_client) and the CLI command (secid) stay simple.
+name = "cloudsecurityalliance-secid"
 version = "1.0.0"
 description = "Resolve security identifiers to URLs using the SecID API"
 readme = "README.md"
