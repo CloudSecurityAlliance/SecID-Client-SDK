@@ -105,7 +105,7 @@ export class SecIDResponse {
   /** Highest-weight URL from resolution results, or undefined. */
   get bestUrl(): string | undefined {
     const resolved = this.resolutionResults;
-    return resolved.length > 0 ? resolved[0].url : undefined;
+    return resolved.length > 0 ? validateUrl(resolved[0].url) : undefined;
   }
 
   /** True if the server corrected the input. */
@@ -125,6 +125,23 @@ export class SecIDResponse {
     return this.results
       .filter((r): r is RegistryResult => "data" in r);
   }
+}
+
+// The resolver response is untrusted (a hostile, federated, or MITM'd resolver
+// is in scope). Only http(s) URLs may be surfaced as a "best URL"; anything
+// else (javascript:, data:, file:, ...) or a relative URL is rejected.
+const ALLOWED_URL_SCHEMES = new Set(["https:", "http:"]);
+
+/** Return url only if it is an absolute http(s) URL, else undefined. */
+function validateUrl(url: unknown): string | undefined {
+  if (typeof url !== "string" || url.length === 0) return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return undefined;
+  }
+  return ALLOWED_URL_SCHEMES.has(parsed.protocol) ? url : undefined;
 }
 
 /** HTTP client for the SecID resolve API. */
@@ -149,7 +166,7 @@ export class SecIDClient {
    * @param secid - Full SecID string, e.g. "secid:advisory/mitre.org/cve#CVE-2021-44228"
    */
   async resolve(secid: string): Promise<SecIDResponse> {
-    const encoded = secid.replace(/#/g, "%23");
+    const encoded = encodeURIComponent(secid);
     const url = `${this.baseUrl}/api/v1/resolve?secid=${encoded}`;
 
     let data: Record<string, unknown>;

@@ -9,6 +9,13 @@
 
 import { SecIDClient } from "./secid-client.js";
 
+/** Strip C0/C1 control chars (incl. ESC) from server-controlled text before
+ * printing to a terminal — prevents ANSI/escape-sequence injection. */
+function sanitizeTerminal(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
@@ -45,9 +52,9 @@ async function main(): Promise<void> {
       if (response.wasCorrected) {
         const first = response.results[0];
         const corrected = first && "secid" in first ? first.secid : "";
-        console.error(`(corrected to: ${corrected})`);
+        console.error(`(corrected to: ${sanitizeTerminal(String(corrected))})`);
       }
-      console.log(url);
+      console.log(sanitizeTerminal(url));
     } else {
       for (const r of response.registryResults) {
         console.log(JSON.stringify(r, null, 2));
@@ -59,7 +66,7 @@ async function main(): Promise<void> {
     }
   } else {
     const msg = response.message ?? "No results";
-    console.error(`${response.status}: ${msg}`);
+    console.error(`${response.status}: ${sanitizeTerminal(msg)}`);
     process.exit(1);
   }
 }

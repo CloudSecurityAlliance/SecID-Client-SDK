@@ -294,3 +294,25 @@ func TestFixturesLoaded(t *testing.T) {
 	}
 	fmt.Printf("Loaded %d test fixtures\n", len(fixtures))
 }
+
+// Untrusted-response hardening (audit finding F-08): BestURL must reject a
+// hostile-scheme URL from the resolver and only surface http(s).
+func TestBestURLScheme(t *testing.T) {
+	w := func(n int) *int { return &n }
+	for _, bad := range []string{"javascript:alert(1)", "data:text/html,x", "file:///etc/passwd", "//evil.example/x", "/relative", ""} {
+		r := &Response{Status: "found", Results: []Result{{SecID: "x", Weight: w(100), URL: bad}}}
+		if got := r.BestURL(); got != "" {
+			t.Errorf("BestURL(%q) = %q, want \"\" (rejected)", bad, got)
+		}
+	}
+	ok := &Response{Status: "found", Results: []Result{{SecID: "x", Weight: w(100), URL: "https://example.com/ok"}}}
+	if got := ok.BestURL(); got != "https://example.com/ok" {
+		t.Errorf("BestURL(valid https) = %q, want it unchanged", got)
+	}
+}
+
+func TestSanitizeTerminal(t *testing.T) {
+	if got := sanitizeTerminal("https://x/\x1b[2Jfake"); got != "https://x/[2Jfake" {
+		t.Errorf("sanitizeTerminal stripped wrong: %q", got)
+	}
+}

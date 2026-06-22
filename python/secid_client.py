@@ -29,6 +29,7 @@ __version__ = "0.1.0"
 import json
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
@@ -60,9 +61,13 @@ class SecIDResponse:
 
     @property
     def best_url(self) -> str | None:
-        """Highest-weight URL from resolution results, or None."""
+        """Highest-weight URL from resolution results, or None.
+
+        The chosen URL is scheme-validated (https/http only) before being
+        returned; a hostile-scheme or relative URL from the resolver yields None.
+        """
         resolved = self.resolution_results
-        return resolved[0]["url"] if resolved else None
+        return _validate_url(resolved[0]["url"]) if resolved else None
 
     @property
     def was_corrected(self) -> bool:
@@ -82,6 +87,34 @@ class SecIDResponse:
     def registry_results(self) -> list[dict[str, Any]]:
         """Only results with data (registry/browsing info)."""
         return [r for r in self.results if "data" in r]
+
+
+# The resolver response is untrusted (a hostile, federated, or MITM'd resolver
+# is in scope). Only these schemes may be surfaced as a "best URL"; anything
+# else (javascript:, data:, file:, ...) or a scheme-less/relative URL is rejected.
+ALLOWED_URL_SCHEMES = frozenset({"https", "http"})
+
+
+def _validate_url(url: Any) -> str | None:
+    """Return url only if it is an absolute http(s) URL, else None."""
+    if not isinstance(url, str) or not url:
+        return None
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return None
+    if parsed.scheme.lower() not in ALLOWED_URL_SCHEMES or not parsed.netloc:
+        return None
+    return url
+
+
+def _sanitize_terminal(text: str) -> str:
+    """Strip C0/C1 control chars (incl. ESC) from server-controlled text before
+    printing to a terminal — prevents ANSI/escape-sequence injection."""
+    return "".join(
+        ch for ch in text
+        if not (ord(ch) < 0x20 or ord(ch) == 0x7F or 0x80 <= ord(ch) <= 0x9F)
+    )
 
 
 class SecIDClient:
@@ -106,7 +139,7 @@ class SecIDClient:
         Returns:
             SecIDResponse with status, results, and optional message.
         """
-        encoded = secid.replace("#", "%23")
+        encoded = urllib.parse.quote(secid, safe="")
         url = f"{self.base_url}/api/v1/resolve?secid={encoded}"
         req = urllib.request.Request(url, headers={
             "Accept": "application/json",
@@ -121,7 +154,14 @@ class SecIDClient:
                         status="error",
                         message=f"Response exceeds {MAX_RESPONSE_BYTES} byte limit",
                     )
-                data = json.loads(body.decode())
+                try:
+                    data = json.loads(body.decode())
+                except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as e:
+                    return SecIDResponse(
+                        secid_query=secid,
+                        status="error",
+                        message=f"Invalid response (not JSON): {e}",
+                    )
         except urllib.error.HTTPError as e:
             err_body = e.read(MAX_RESPONSE_BYTES).decode()
             try:
@@ -191,8 +231,8 @@ def main() -> None:
         url = response.best_url
         if url:
             if response.was_corrected:
-                print(f"(corrected to: {response.results[0].get('secid', '')})", file=sys.stderr)
-            print(url)
+                print(f"(corrected to: {_sanitize_terminal(str(response.results[0].get('secid', '')))})", file=sys.stderr)
+            print(_sanitize_terminal(url))
         else:
             for r in response.registry_results:
                 print(json.dumps(r, indent=2))
@@ -201,7 +241,7 @@ def main() -> None:
             print(json.dumps(r, indent=2))
     else:
         msg = response.message or "No results"
-        print(f"{response.status}: {msg}", file=sys.stderr)
+        print(f"{response.status}: {_sanitize_terminal(msg)}", file=sys.stderr)
         sys.exit(1)
 
 

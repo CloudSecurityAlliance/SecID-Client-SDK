@@ -239,3 +239,32 @@ def test_connection_refused(fixture):
         assert resp.status == "error"
     except Exception:
         pass  # Exception is also acceptable
+
+
+# ── Untrusted-response hardening (audit findings F-08, F-10-02) ──
+
+from secid_client import SecIDResponse, _validate_url, _sanitize_terminal  # noqa: E402
+
+
+def test_validate_url_scheme_allowlist():
+    assert _validate_url("https://www.cve.org/CVERecord?id=CVE-2021-44228")
+    assert _validate_url("http://example.com/x")
+    for bad in ("javascript:alert(1)", "data:text/html,x", "file:///etc/passwd",
+                "vbscript:msgbox(1)", "//evil.example/x", "/relative", "", None):
+        assert _validate_url(bad) is None, f"{bad!r} must be rejected"
+
+
+def test_best_url_rejects_hostile_scheme():
+    # A hostile resolver returns a javascript: URL as the highest-weight result.
+    r = SecIDResponse(secid_query="x", status="found",
+                      results=[{"weight": 100, "url": "javascript:fetch('//evil')"}])
+    assert r.best_url is None
+    # A valid https result is returned unchanged.
+    r2 = SecIDResponse(secid_query="x", status="found",
+                       results=[{"weight": 100, "url": "https://example.com/ok"}])
+    assert r2.best_url == "https://example.com/ok"
+
+
+def test_sanitize_terminal_strips_control_chars():
+    assert _sanitize_terminal("https://x/\x1b[2Jfake") == "https://x/[2Jfake"
+    assert _sanitize_terminal("plain text") == "plain text"

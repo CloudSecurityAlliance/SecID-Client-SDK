@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -68,13 +69,41 @@ func (r Result) HasWeight() bool {
 	return r.Weight != nil
 }
 
+// allowedURLSchemes — the resolver response is untrusted (a hostile, federated,
+// or MITM'd resolver is in scope); only http(s) URLs may be surfaced as a best URL.
+var allowedURLSchemes = map[string]bool{"https": true, "http": true}
+
+// validateURL returns u only if it is an absolute http(s) URL, else "".
+func validateURL(u string) string {
+	if u == "" {
+		return ""
+	}
+	parsed, err := url.Parse(u)
+	if err != nil || !allowedURLSchemes[strings.ToLower(parsed.Scheme)] || parsed.Host == "" {
+		return ""
+	}
+	return u
+}
+
+// sanitizeTerminal strips C0/C1 control chars (incl. ESC) from server-controlled
+// text before printing — prevents ANSI/escape-sequence injection.
+func sanitizeTerminal(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+			return -1
+		}
+		return r
+	}, s)
+}
+
 // BestURL returns the highest-weight URL from resolution results, or empty string.
+// The URL is scheme-validated (http/https only) before being returned.
 func (r *Response) BestURL() string {
 	resolved := r.ResolutionResults()
 	if len(resolved) == 0 {
 		return ""
 	}
-	return resolved[0].URL
+	return validateURL(resolved[0].URL)
 }
 
 // WasCorrected returns true if the server corrected the input.
@@ -127,10 +156,10 @@ func NewClient(baseURL string) *Client {
 // Resolve resolves a SecID string to URL(s).
 // The # character is automatically encoded as %23 in the query parameter.
 func (c *Client) Resolve(secid string) (*Response, error) {
-	encoded := strings.ReplaceAll(secid, "#", "%23")
-	url := fmt.Sprintf("%s/api/v1/resolve?secid=%s", c.BaseURL, encoded)
+	encoded := url.QueryEscape(secid)
+	reqURL := fmt.Sprintf("%s/api/v1/resolve?secid=%s", c.BaseURL, encoded)
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", reqURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
 	}
@@ -218,9 +247,9 @@ func main() {
 		url := resp.BestURL()
 		if url != "" {
 			if resp.WasCorrected() && len(resp.Results) > 0 {
-				fmt.Fprintf(os.Stderr, "(corrected to: %s)\n", resp.Results[0].SecID)
+				fmt.Fprintf(os.Stderr, "(corrected to: %s)\n", sanitizeTerminal(resp.Results[0].SecID))
 			}
-			fmt.Println(url)
+			fmt.Println(sanitizeTerminal(url))
 		} else {
 			for _, r := range resp.RegistryResults() {
 				out, _ := json.MarshalIndent(r, "", "  ")
@@ -237,7 +266,7 @@ func main() {
 		if msg == "" {
 			msg = "No results"
 		}
-		fmt.Fprintf(os.Stderr, "%s: %s\n", resp.Status, msg)
+		fmt.Fprintf(os.Stderr, "%s: %s\n", resp.Status, sanitizeTerminal(msg))
 		os.Exit(1)
 	}
 }
