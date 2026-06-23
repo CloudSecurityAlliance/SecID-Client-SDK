@@ -13,10 +13,11 @@
     }
   },
   "bin": {
-    "secid": "./dist/secid-cli.js"
+    "secid": "dist/secid-cli.js"
   },
   "files": [
-    "dist/"
+    "dist/",
+    "!dist/**/*.test.*"
   ],
   "scripts": {
     "build": "tsc",
@@ -43,7 +44,7 @@
   "homepage": "https://github.com/CloudSecurityAlliance/SecID",
   "repository": {
     "type": "git",
-    "url": "https://github.com/CloudSecurityAlliance/SecID-Client-SDK.git",
+    "url": "git+https://github.com/CloudSecurityAlliance/SecID-Client-SDK.git",
     "directory": "typescript"
   },
   "bugs": {
