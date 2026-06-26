@@ -149,6 +149,12 @@ go run go/secid.go "secid:advisory/mitre.org/cve#CVE-2021-44228"
 | [SecID-Service](https://github.com/CloudSecurityAlliance/SecID-Service) | Cloudflare Worker REST API + MCP server |
 | **SecID-Client-SDK** (this repo) | Instructions + reference clients |
 
+## Publishing
+
+Maintainers: see [PUBLISHING.md](PUBLISHING.md) for how to publish the npm
+(`@cloudsecurityalliance/secid`) and PyPI (`cloudsecurityalliance-secid`)
+packages.
+
 ## License
 
 Apache 2.0
