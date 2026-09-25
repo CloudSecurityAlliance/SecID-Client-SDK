@@ -113,7 +113,7 @@ cd go && go test -v ./...
 
 The three clients handle errors differently:
 
-- **Python** — `resolve()` returns `SecIDResponse(status="error")` for most errors, but may raise `JSONDecodeError` for invalid JSON on HTTP 200
+- **Python** — `resolve()` always returns `SecIDResponse` with `status="error"` (never raises), including for timeouts, non-JSON or non-object bodies, and an unusable `base_url`
 - **TypeScript** — `resolve()` always returns `SecIDResponse` with `status="error"` (never throws)
 - **Go** — `Resolve()` returns `(nil, error)` for network/parse failures, `(*Response, nil)` with `Status="error"` for server-reported errors
 
