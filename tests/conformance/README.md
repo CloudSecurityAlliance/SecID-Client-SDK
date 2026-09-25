@@ -107,7 +107,7 @@ Implementations that don't yet support a variant's feature should be tested WITH
    ```bash
    python tests/conformance-harness/python/run.py --target https://secid.cloudsecurityalliance.org --category your-new-category
    ```
-4. Open a PR. The PR's CI will run the suite against the live Worker as a sanity check.
+4. Open a PR. CI runs the suite against the live Worker in the non-blocking `Resolver conformance (live, non-blocking)` job of `.github/workflows/test.yml`. A failure there is shown but does not block the merge, because it depends on the network and on live registry data. Check it anyway.
 
 ## When fixtures fail
 
