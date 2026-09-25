@@ -101,14 +101,42 @@ rm -rf /tmp/secid-check
 
 ## Go
 
-No publish step. Consumers use the module path directly:
+No registry upload. Consumers fetch the module straight from GitHub through the
+Go module proxy:
 
 ```bash
-go get github.com/CloudSecurityAlliance/SecID-Client-SDK/go
+go get github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v1.0.0
+go install github.com/CloudSecurityAlliance/SecID-Client-SDK/go/cmd/secid@v1.0.0
 ```
 
-A version tag (`git tag vX.Y.Z && git push --tags`) makes a release resolvable
-via the Go module proxy, but is not required for `go get` against a branch.
+**The module is in the `go/` subdirectory, so its tags must be prefixed with
+`go/`.** Go maps a module at `<repo>/go` to tags named `go/vX.Y.Z`. A plain
+`vX.Y.Z` tag on the repository root is ignored for this module — `go get
+…/go@v1.0.0` would fail to find it.
+
+```bash
+git checkout main && git pull
+cd go && go test ./... && cd ..
+git tag -a go/v1.0.0 -m "Go client v1.0.0"
+git push origin go/v1.0.0
+```
+
+Verify the proxy has picked it up (may take a minute):
+
+```bash
+GOPROXY=https://proxy.golang.org go list -m github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v1.0.0
+```
+
+Without any tag, `go get …/go@main` still works, but consumers get a
+pseudo-version (`v0.0.0-2026…-abcdef`) rather than `v1.0.0`.
+
+Notes:
+- The library is `package secid` (importable); the CLI is `go/cmd/secid`
+  (`package main`). A `package main` library cannot be imported, which is why
+  they are split.
+- Go tags are immutable in practice: the module proxy and checksum database
+  cache the first content they see for a tag. Never move or re-push a tag —
+  cut a new patch version instead.
 
 ---
 
@@ -118,7 +146,7 @@ Keep the three versions in lockstep when releasing a coordinated change:
 
 - npm: `typescript/package.json` → `version`
 - PyPI: `python/pyproject.toml` → `version`
-- Go: a `vX.Y.Z` git tag
+- Go: a `go/vX.Y.Z` git tag (note the `go/` prefix)
 
 After bumping, re-run the dry-run / check steps above before each publish.
 

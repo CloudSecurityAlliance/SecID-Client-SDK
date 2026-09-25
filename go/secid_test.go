@@ -1,4 +1,4 @@
-package main
+package secid
 
 import (
 	"encoding/json"
@@ -46,15 +46,15 @@ type MockResponse struct {
 }
 
 type FixtureExpected struct {
-	Status               *string `json:"status,omitempty"`
-	BestURL              *string `json:"best_url"` // pointer to distinguish null from absent
-	WasCorrected         *bool   `json:"was_corrected,omitempty"`
-	ResolutionResultCount *int   `json:"resolution_result_count,omitempty"`
-	RegistryResultCount  *int    `json:"registry_result_count,omitempty"`
-	Message              *string `json:"message"` // pointer to distinguish null from absent
-	RaisesError          bool    `json:"raises_error,omitempty"`
-	ErrorContains        string  `json:"error_contains,omitempty"`
-	RequestURLContains   string  `json:"request_url_contains,omitempty"`
+	Status                *string `json:"status,omitempty"`
+	BestURL               *string `json:"best_url"` // pointer to distinguish null from absent
+	WasCorrected          *bool   `json:"was_corrected,omitempty"`
+	ResolutionResultCount *int    `json:"resolution_result_count,omitempty"`
+	RegistryResultCount   *int    `json:"registry_result_count,omitempty"`
+	Message               *string `json:"message"` // pointer to distinguish null from absent
+	RaisesError           bool    `json:"raises_error,omitempty"`
+	ErrorContains         string  `json:"error_contains,omitempty"`
+	RequestURLContains    string  `json:"request_url_contains,omitempty"`
 	RequestURLNotContains string  `json:"request_url_not_contains,omitempty"`
 }
 
@@ -298,7 +298,7 @@ func TestFixturesLoaded(t *testing.T) {
 // Untrusted-response hardening (audit finding F-08): BestURL must reject a
 // hostile-scheme URL from the resolver and only surface http(s).
 func TestBestURLScheme(t *testing.T) {
-	w := func(n int) *int { return &n }
+	w := func(n float64) *float64 { return &n }
 	for _, bad := range []string{"javascript:alert(1)", "data:text/html,x", "file:///etc/passwd", "//evil.example/x", "/relative", ""} {
 		r := &Response{Status: "found", Results: []Result{{SecID: "x", Weight: w(100), URL: bad}}}
 		if got := r.BestURL(); got != "" {
@@ -311,8 +311,60 @@ func TestBestURLScheme(t *testing.T) {
 	}
 }
 
-func TestSanitizeTerminal(t *testing.T) {
-	if got := sanitizeTerminal("https://x/\x1b[2Jfake"); got != "https://x/[2Jfake" {
-		t.Errorf("sanitizeTerminal stripped wrong: %q", got)
+// Hostile/malformed response shapes (audit finding M6). The resolver is
+// untrusted: a bad field must not reject the whole response, and a body that
+// is not a JSON object must be an error rather than an empty Status.
+func TestHostileResponseShapes(t *testing.T) {
+	serve := func(body string) *Client {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(body))
+		}))
+		t.Cleanup(srv.Close)
+		return NewClient(srv.URL)
+	}
+
+	for _, body := range []string{"null", "[]", `"found"`, "42", "", "   "} {
+		if resp, err := serve(body).Resolve("secid:x/y/z"); err == nil {
+			t.Errorf("body %q: expected error, got response %+v", body, resp)
+		}
+	}
+
+	// Non-integer, string, and null weights: the response still decodes;
+	// a float weight counts, string/null weights are treated as absent.
+	resp, err := serve(`{"secid_query":"q","status":"found","results":[
+		{"secid":"a","weight":"high","url":"https://a.example/"},
+		{"secid":"b","weight":null,"url":"https://b.example/"},
+		{"secid":"c","weight":87.5,"url":"https://c.example/"},
+		{"secid":"d","weight":90,"url":"https://d.example/"},
+		17, "junk", null, [1,2],
+		{"secid":5,"weight":95,"url":{"nested":true}}
+	]}`).Resolve("secid:x/y/z")
+	if err != nil {
+		t.Fatalf("mixed weights: unexpected error: %v", err)
+	}
+	if got := resp.BestURL(); got != "https://d.example/" {
+		t.Errorf("BestURL = %q, want https://d.example/", got)
+	}
+	if n := len(resp.ResolutionResults()); n != 2 {
+		t.Errorf("ResolutionResults = %d, want 2 (c and d)", n)
+	}
+
+	// Non-array results and non-string message decode to empty values.
+	resp, err = serve(`{"status":"found","results":{"not":"an array"},"message":7}`).Resolve("secid:x/y/z")
+	if err != nil {
+		t.Fatalf("non-array results: unexpected error: %v", err)
+	}
+	if len(resp.Results) != 0 || resp.Message != "" {
+		t.Errorf("expected no results and empty message, got %+v", resp)
+	}
+
+	// A JSON object with no status is reported as status "error".
+	resp, err = serve(`{}`).Resolve("secid:x/y/z")
+	if err != nil {
+		t.Fatalf("empty object: unexpected error: %v", err)
+	}
+	if resp.Status != "error" {
+		t.Errorf("empty object: Status = %q, want error", resp.Status)
 	}
 }

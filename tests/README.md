@@ -27,7 +27,7 @@ cd python && pip install -e . && python -m pytest test_secid_client.py -v
 cd typescript && npm install && npm test
 
 # Go (from repo root)
-cd go && go test -v
+cd go && go test -v ./...
 ```
 
 ## Fixture Format

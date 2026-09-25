@@ -11,23 +11,26 @@
 //
 // Usage as library:
 //
+//	import "github.com/CloudSecurityAlliance/SecID-Client-SDK/go"
+//
 //	client := secid.NewClient("")
 //	resp, err := client.Resolve("secid:advisory/mitre.org/cve#CVE-2021-44228")
 //	fmt.Println(resp.BestURL())
 //
-// Usage as CLI:
+// The CLI lives in the cmd/secid subdirectory:
 //
-//	go run secid.go "secid:advisory/mitre.org/cve#CVE-2021-44228"
-//	go run secid.go --json "secid:advisory/mitre.org/cve#CVE-2021-44228"
-package main
+//	go run ./cmd/secid "secid:advisory/mitre.org/cve#CVE-2021-44228"
+//	go run ./cmd/secid --json "secid:advisory/mitre.org/cve#CVE-2021-44228"
+package secid
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"time"
@@ -52,21 +55,102 @@ type Response struct {
 // Result is a single item in the results array.
 // Check HasWeight() to determine if this is a resolution result (weight + url)
 // or a registry result (data).
+//
+// Decoding is deliberately tolerant: the resolver response is untrusted, so a
+// field with an unexpected JSON type (a string weight, a numeric url) is left
+// at its zero value instead of rejecting the whole response. Weight is a float
+// because the API contract only promises a number, not an integer.
 type Result struct {
-	SecID              string                 `json:"secid"`
-	Weight             *int                   `json:"weight,omitempty"`
-	URL                string                 `json:"url,omitempty"`
-	ContentType        string                 `json:"content_type,omitempty"`        // MIME type
-	Parsability        string                 `json:"parsability,omitempty"`          // "structured" or "scraped"
-	Schema             string                 `json:"schema,omitempty"`               // SecID reference to data schema
-	ParseInstructions  string                 `json:"parsing_instructions,omitempty"` // SecID reference to parsing doc
-	Auth               string                 `json:"auth,omitempty"`                 // Free-text auth description
-	Data               map[string]interface{} `json:"data,omitempty"`
+	SecID             string                 `json:"secid"`
+	Weight            *float64               `json:"weight,omitempty"`
+	URL               string                 `json:"url,omitempty"`
+	ContentType       string                 `json:"content_type,omitempty"`         // MIME type
+	Parsability       string                 `json:"parsability,omitempty"`          // "structured" or "scraped"
+	Schema            string                 `json:"schema,omitempty"`               // SecID reference to data schema
+	ParseInstructions string                 `json:"parsing_instructions,omitempty"` // SecID reference to parsing doc
+	Auth              string                 `json:"auth,omitempty"`                 // Free-text auth description
+	Data              map[string]interface{} `json:"data,omitempty"`
 }
 
 // HasWeight returns true if this is a resolution result (has weight + url).
 func (r Result) HasWeight() bool {
 	return r.Weight != nil
+}
+
+// UnmarshalJSON decodes a result object field by field, ignoring fields whose
+// JSON type does not match. A non-object element is an error; Response
+// decoding skips such elements rather than failing.
+func (r *Result) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if raw == nil {
+		return errors.New("result is not a JSON object")
+	}
+	*r = Result{}
+	str := func(key string) string {
+		var s string
+		if v, ok := raw[key]; ok && json.Unmarshal(v, &s) == nil {
+			return s
+		}
+		return ""
+	}
+	r.SecID = str("secid")
+	r.URL = str("url")
+	r.ContentType = str("content_type")
+	r.Parsability = str("parsability")
+	r.Schema = str("schema")
+	r.ParseInstructions = str("parsing_instructions")
+	r.Auth = str("auth")
+	if v, ok := raw["weight"]; ok {
+		var w float64
+		if json.Unmarshal(v, &w) == nil && !bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
+			r.Weight = &w
+		}
+	}
+	if v, ok := raw["data"]; ok {
+		var d map[string]interface{}
+		if json.Unmarshal(v, &d) == nil && d != nil {
+			r.Data = d
+		}
+	}
+	return nil
+}
+
+// UnmarshalJSON decodes the envelope tolerantly: results that are not JSON
+// objects are skipped, and a non-array "results" value yields no results. The
+// envelope itself must be a JSON object; Resolve reports anything else as an
+// error.
+func (r *Response) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	if raw == nil {
+		return errors.New("response is not a JSON object")
+	}
+	*r = Response{}
+	str := func(key string) string {
+		var s string
+		if v, ok := raw[key]; ok && json.Unmarshal(v, &s) == nil {
+			return s
+		}
+		return ""
+	}
+	r.SecIDQuery = str("secid_query")
+	r.Status = str("status")
+	r.Message = str("message")
+	var items []json.RawMessage
+	if v, ok := raw["results"]; ok && json.Unmarshal(v, &items) == nil {
+		for _, item := range items {
+			var res Result
+			if json.Unmarshal(item, &res) == nil {
+				r.Results = append(r.Results, res)
+			}
+		}
+	}
+	return nil
 }
 
 // allowedURLSchemes — the resolver response is untrusted (a hostile, federated,
@@ -83,17 +167,6 @@ func validateURL(u string) string {
 		return ""
 	}
 	return u
-}
-
-// sanitizeTerminal strips C0/C1 control chars (incl. ESC) from server-controlled
-// text before printing — prevents ANSI/escape-sequence injection.
-func sanitizeTerminal(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
-			return -1
-		}
-		return r
-	}, s)
 }
 
 // BestURL returns the highest-weight URL from resolution results, or empty string.
@@ -119,7 +192,7 @@ func (r *Response) ResolutionResults() []Result {
 			resolved = append(resolved, res)
 		}
 	}
-	sort.Slice(resolved, func(i, j int) bool {
+	sort.SliceStable(resolved, func(i, j int) bool {
 		return *resolved[i].Weight > *resolved[j].Weight
 	})
 	return resolved
@@ -181,9 +254,22 @@ func (c *Client) Resolve(secid string) (*Response, error) {
 		return nil, fmt.Errorf("response exceeds %d byte limit", MaxResponseBytes)
 	}
 
+	// Anything but a JSON object (null, [], a bare string) is not a SecID
+	// envelope. Reject it here instead of returning a Response with an empty
+	// Status that callers would mistake for a real answer.
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return nil, fmt.Errorf("parsing response: expected a JSON object, got %.40q", trimmed)
+	}
 	var result Response
-	if err := json.Unmarshal(body, &result); err != nil {
+	if err := json.Unmarshal(trimmed, &result); err != nil {
 		return nil, fmt.Errorf("parsing response: %w", err)
+	}
+	if result.Status == "" {
+		result.Status = "error"
+		if result.Message == "" {
+			result.Message = "Response has no status field"
+		}
 	}
 	return &result, nil
 }
@@ -202,71 +288,4 @@ func (c *Client) BestURL(secid string) (string, error) {
 // Equivalent to Resolve(fmt.Sprintf("secid:%s/%s", typ, identifier)).
 func (c *Client) Lookup(typ, identifier string) (*Response, error) {
 	return c.Resolve(fmt.Sprintf("secid:%s/%s", typ, identifier))
-}
-
-func main() {
-	if len(os.Args) < 2 || os.Args[1] == "-h" || os.Args[1] == "--help" {
-		fmt.Println("Usage: secid [--json] <secid>")
-		fmt.Println()
-		fmt.Println("Examples:")
-		fmt.Println(`  secid "secid:advisory/mitre.org/cve#CVE-2021-44228"`)
-		fmt.Println(`  secid --json "secid:advisory/mitre.org/cve#CVE-2021-44228"`)
-		fmt.Println(`  secid "secid:advisory/CVE-2021-44228"`)
-		os.Exit(0)
-	}
-
-	jsonMode := false
-	var secid string
-	for _, arg := range os.Args[1:] {
-		if arg == "--json" {
-			jsonMode = true
-		} else if secid == "" {
-			secid = arg
-		}
-	}
-	if secid == "" {
-		fmt.Fprintln(os.Stderr, "Error: no SecID provided")
-		os.Exit(1)
-	}
-
-	client := NewClient("")
-	resp, err := client.Resolve(secid)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	if jsonMode {
-		out, _ := json.MarshalIndent(resp, "", "  ")
-		fmt.Println(string(out))
-		return
-	}
-
-	switch resp.Status {
-	case "found", "corrected":
-		url := resp.BestURL()
-		if url != "" {
-			if resp.WasCorrected() && len(resp.Results) > 0 {
-				fmt.Fprintf(os.Stderr, "(corrected to: %s)\n", sanitizeTerminal(resp.Results[0].SecID))
-			}
-			fmt.Println(sanitizeTerminal(url))
-		} else {
-			for _, r := range resp.RegistryResults() {
-				out, _ := json.MarshalIndent(r, "", "  ")
-				fmt.Println(string(out))
-			}
-		}
-	case "related":
-		for _, r := range resp.Results {
-			out, _ := json.MarshalIndent(r, "", "  ")
-			fmt.Println(string(out))
-		}
-	default:
-		msg := resp.Message
-		if msg == "" {
-			msg = "No results"
-		}
-		fmt.Fprintf(os.Stderr, "%s: %s\n", resp.Status, sanitizeTerminal(msg))
-		os.Exit(1)
-	}
 }
