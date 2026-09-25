@@ -98,7 +98,9 @@ export class SecIDResponse {
   }) {
     this.secidQuery = data.secid_query;
     this.status = data.status;
-    this.results = data.results ?? [];
+    // Keep only object entries: the getters below read properties off each
+    // result, and a hostile resolver can put anything in the array.
+    this.results = Array.isArray(data.results) ? data.results.filter(isObject) : [];
     this.message = data.message ?? undefined;
   }
 
@@ -113,10 +115,18 @@ export class SecIDResponse {
     return this.status === "corrected";
   }
 
-  /** Only results with weight + url, sorted by weight descending. */
+  /**
+   * Only results with a numeric weight and a string url, sorted by weight
+   * descending. A missing, null, string, or non-finite weight is not a
+   * resolution result (sorting it as 0 or NaN would corrupt the order).
+   */
   get resolutionResults(): ResolutionResult[] {
     return this.results
-      .filter((r): r is ResolutionResult => "weight" in r && "url" in r)
+      .filter((r): r is ResolutionResult => {
+        const w = (r as { weight?: unknown }).weight;
+        return typeof w === "number" && Number.isFinite(w)
+          && typeof (r as { url?: unknown }).url === "string";
+      })
       .sort((a, b) => b.weight - a.weight);
   }
 
@@ -125,6 +135,25 @@ export class SecIDResponse {
     return this.results
       .filter((r): r is RegistryResult => "data" in r);
   }
+}
+
+/** True for a non-null, non-array object. */
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Build a SecIDResponse from an untrusted parsed JSON object, type-checking
+ * each field. Wrong-typed fields fall back to defaults.
+ */
+function envelope(data: Record<string, unknown>, secid: string): SecIDResponse {
+  const { secid_query, status, results, message } = data;
+  return new SecIDResponse({
+    secid_query: typeof secid_query === "string" ? secid_query : secid,
+    status: typeof status === "string" && status !== "" ? status : "error",
+    results: Array.isArray(results) ? (results.filter(isObject) as unknown as SecIDResult[]) : [],
+    message: typeof message === "string" ? message : undefined,
+  });
 }
 
 // The resolver response is untrusted (a hostile, federated, or MITM'd resolver
@@ -164,12 +193,21 @@ export class SecIDClient {
    * The # character is automatically encoded as %23 in the query parameter.
    *
    * @param secid - Full SecID string, e.g. "secid:advisory/mitre.org/cve#CVE-2021-44228"
+   * @returns Never rejects for network, HTTP, or response-format problems:
+   *   those come back as status "error" with an explanatory message.
    */
   async resolve(secid: string): Promise<SecIDResponse> {
     const encoded = encodeURIComponent(secid);
     const url = `${this.baseUrl}/api/v1/resolve?secid=${encoded}`;
 
-    let data: Record<string, unknown>;
+    const error = (message: string) =>
+      new SecIDResponse({ secid_query: secid, status: "error", results: [], message });
+
+    // Transport: fetch + bounded body read. Nothing in resolve() throws —
+    // every failure becomes status="error".
+    let body: string;
+    let httpStatus: number;
+    let ok: boolean;
     try {
       const resp = await fetch(url, {
         headers: {
@@ -178,44 +216,46 @@ export class SecIDClient {
         },
         signal: AbortSignal.timeout(this.timeoutMs),
       });
+      httpStatus = resp.status;
+      ok = resp.ok;
       const contentLength = resp.headers.get("content-length");
       if (contentLength && parseInt(contentLength, 10) > MAX_RESPONSE_BYTES) {
-        return new SecIDResponse({
-          secid_query: secid,
-          status: "error",
-          results: [],
-          message: `Response exceeds ${MAX_RESPONSE_BYTES} byte limit`,
-        });
+        try {
+          await resp.body?.cancel();
+        } catch {
+          // Best-effort; the size error is what matters.
+        }
+        return error(`Response exceeds ${MAX_RESPONSE_BYTES} byte limit`);
       }
-      const body = await readBodyWithByteLimit(resp, MAX_RESPONSE_BYTES);
-      data = JSON.parse(body) as Record<string, unknown>;
+      body = await readBodyWithByteLimit(resp, MAX_RESPONSE_BYTES);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.startsWith("Response exceeds ")) {
-        return new SecIDResponse({
-          secid_query: secid,
-          status: "error",
-          results: [],
-          message: msg,
-        });
+      if (msg.startsWith("Response exceeds ")) return error(msg);
+      // AbortSignal.timeout rejects with a TimeoutError DOMException, both
+      // while waiting for headers and while streaming the body.
+      const name = (err as { name?: unknown } | null)?.name;
+      if (name === "TimeoutError" || name === "AbortError") {
+        return error(`Request timeout after ${this.timeoutMs}ms: ${msg}`);
       }
-      const prefix = err instanceof DOMException && err.name === "TimeoutError"
-        ? "Request timed out"
-        : "Connection error";
-      return new SecIDResponse({
-        secid_query: secid,
-        status: "error",
-        results: [],
-        message: `${prefix}: ${msg}`,
-      });
+      return error(`Connection error: ${msg}`);
     }
 
-    return new SecIDResponse({
-      secid_query: (data.secid_query as string) ?? secid,
-      status: (data.status as string) ?? "error",
-      results: (data.results as SecIDResult[]) ?? [],
-      message: data.message as string | undefined,
-    });
+    // Parsing: a separate step, so a bad body is not reported as a
+    // connection problem.
+    let data: unknown;
+    try {
+      data = JSON.parse(body);
+    } catch (err) {
+      if (!ok) return error(`HTTP ${httpStatus}: ${body.slice(0, 200)}`);
+      const msg = err instanceof Error ? err.message : String(err);
+      return error(`Invalid response (not JSON): ${msg}`);
+    }
+    if (!isObject(data)) {
+      if (!ok) return error(`HTTP ${httpStatus}: ${body.slice(0, 200)}`);
+      const kind = data === null ? "null" : Array.isArray(data) ? "array" : typeof data;
+      return error(`Invalid response: expected a JSON object, got ${kind}`);
+    }
+    return envelope(data, secid);
   }
 
   /**
