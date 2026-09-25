@@ -427,3 +427,22 @@ def test_unpaired_surrogate_secid():
     resp = SecIDClient("http://127.0.0.1:1", timeout=2).resolve("secid:x/y/\ud800")
     assert resp.status == "error"
     assert "Unicode" in resp.message
+
+
+def test_user_agent_carries_version(mock_server):
+    import secid_client
+
+    configure_mock({"http_status": 200, "body": {"status": "found", "results": []}})
+    captured = {}
+    orig = MockHandler.do_GET
+
+    def spy(self):
+        captured["ua"] = self.headers.get("User-Agent")
+        orig(self)
+
+    MockHandler.do_GET = spy
+    try:
+        SecIDClient(base_url=f"http://127.0.0.1:{mock_server}", timeout=5).resolve("secid:x/y/z")
+    finally:
+        MockHandler.do_GET = orig
+    assert captured["ua"] == f"secid-python-client/{secid_client.__version__}"

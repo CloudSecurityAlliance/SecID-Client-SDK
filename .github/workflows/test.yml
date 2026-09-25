@@ -2,12 +2,15 @@ name: Test
 
 # Runs the fixture-driven test suite across all three language implementations
 # (Python, TypeScript, Go). Each implementation reads the shared tests/fixtures.json
-# and runs the same 35 behavioral test cases against a per-language mock server.
+# and runs the same behavioral test cases against a per-language mock server.
 #
 # The shared-fixtures pattern is the SDK's main quality safeguard: identical
 # expected behavior across languages means drift between Python, TypeScript,
 # and Go implementations is caught immediately. This workflow is what makes
 # that safeguard actually run on every change.
+#
+# Actions are pinned by commit SHA (tag in the trailing comment) so a moved or
+# compromised tag cannot change what runs here.
 
 on:
   pull_request:
@@ -29,9 +32,11 @@ jobs:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Setup Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install pytest
@@ -47,15 +52,18 @@ jobs:
         working-directory: typescript
     strategy:
       matrix:
-        node-version: ["20", "22"]
+        # package.json declares engines.node >=18, so 18 is tested too.
+        node-version: ["18", "20", "22"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies
-        run: npm ci || npm install
+        run: npm ci
       - name: Run tests
         run: npm test
 
@@ -67,12 +75,36 @@ jobs:
         working-directory: go
     strategy:
       matrix:
-        go-version: ["1.22", "1.23"]
+        # go.mod declares go 1.21, so 1.21 is the floor tested here.
+        go-version: ["1.21", "1.22", "1.23"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Setup Go ${{ matrix.go-version }}
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: ${{ matrix.go-version }}
+      - name: Vet
+        run: go vet ./...
       - name: Run tests
         run: go test -v ./...
+
+  conformance:
+    # Resolver conformance suite (tests/conformance/) against the LIVE public
+    # resolver. It tests the server, not these clients, and depends on the
+    # network and on live registry data, so it is informational: a failure
+    # shows as a red job but does not fail the workflow or block a merge.
+    name: Resolver conformance (live, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - name: Run conformance suite against the live resolver
+        run: python tests/conformance-harness/python/run.py --target https://secid.cloudsecurityalliance.org

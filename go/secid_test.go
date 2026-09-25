@@ -368,3 +368,18 @@ func TestHostileResponseShapes(t *testing.T) {
 		t.Errorf("empty object: Status = %q, want error", resp.Status)
 	}
 }
+
+func TestUserAgentCarriesVersion(t *testing.T) {
+	var ua string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ua = r.Header.Get("User-Agent")
+		w.Write([]byte(`{"status":"found","results":[]}`))
+	}))
+	defer srv.Close()
+	if _, err := NewClient(srv.URL).Resolve("secid:x/y/z"); err != nil {
+		t.Fatal(err)
+	}
+	if want := "secid-go-client/" + Version; ua != want {
+		t.Errorf("User-Agent = %q, want %q", ua, want)
+	}
+}

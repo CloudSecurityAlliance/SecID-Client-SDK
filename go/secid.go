@@ -36,6 +36,10 @@ import (
 	"time"
 )
 
+// Version is the client version. Keep it equal to the go/vX.Y.Z release tag;
+// the User-Agent is built from it.
+const Version = "1.0.0"
+
 const DefaultBaseURL = "https://secid.cloudsecurityalliance.org"
 const DefaultTimeout = 30 * time.Second
 const MaxResponseBytes = 10 * 1024 * 1024 // 10 MB
@@ -275,7 +279,7 @@ func (c *Client) Resolve(secid string) (*Response, error) {
 		return nil, fmt.Errorf("building request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "secid-go-client/1.0")
+	req.Header.Set("User-Agent", "secid-go-client/"+Version)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {

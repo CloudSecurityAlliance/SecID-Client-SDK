@@ -48,7 +48,7 @@ Run a client:
 
 ```bash
 python python/secid_client.py "secid:advisory/mitre.org/cve#CVE-2021-44228"
-npx tsx typescript/src/secid-client.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"
+npx tsx typescript/src/secid-cli.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"   # secid-client.ts is the library; it has no CLI
 (cd go && go run ./cmd/secid "secid:advisory/mitre.org/cve#CVE-2021-44228")   # library is package secid; CLI is go/cmd/secid
 ```
 
@@ -70,7 +70,7 @@ cd go         && go test -run 'TestFixtures/found_cve' -v
 
 Note the TypeScript form: `npm test -- --test-name-pattern=...` does **not** filter (the arg never reaches `node --test`). Call `node` directly.
 
-Resolver conformance suite (not run by CI — invoke it manually):
+Resolver conformance suite (CI runs it against the live resolver as a non-blocking job; run it manually against other targets):
 
 ```bash
 python tests/conformance-harness/python/run.py --target https://secid.cloudsecurityalliance.org
@@ -96,7 +96,7 @@ The client suite is the main guard against language drift: all three harnesses r
 
 Each language also has hand-written tests for hardening the fixture format can't express: URL allowlist, control-character stripping, and hostile bodies served by a raw mock server (mid-body timeouts, non-UTF-8 bytes, unusable base URLs). Counts differ by language; run the suite rather than trusting a number here.
 
-CI (`.github/workflows/test.yml`) runs the client suite only, across Python 3.9–3.13, Node 20/22, Go 1.22/1.23. The conformance suite is manual despite what `tests/conformance/README.md` claims.
+CI (`.github/workflows/test.yml`) runs the client suite across Python 3.9–3.13, Node 18/20/22, and Go 1.21/1.22/1.23 (the floors match `requires-python`, `engines.node`, and `go.mod`). It also runs the conformance suite against the live resolver as a separate job with `continue-on-error`, so a live-API failure is visible without blocking merges. Actions are pinned by commit SHA.
 
 ## Client Invariants
 
@@ -121,7 +121,7 @@ Public surface is deliberately parallel across languages: `resolve`, `lookup`, `
 
 ## Packaging
 
-Published as `cloudsecurityalliance-secid` (PyPI) and `@cloudsecurityalliance/secid` (npm); Go is consumed by module path. Release steps are in `PUBLISHING.md`. The distribution name carries the org prefix only where the registry is flat; the import module (`secid_client`) and CLI command (`secid`) stay unprefixed. TypeScript is the only target with a build step (`tsc` → `dist/`) — Python and Go ship the single source file.
+To be published as `cloudsecurityalliance-secid` (PyPI) and `@cloudsecurityalliance/secid` (npm); neither is on its registry yet, so README "Path 1" gives install-from-git commands. Go is consumed by module path and released with `go/vX.Y.Z` tags (the module is in `go/`). Release steps, including the opt-in `release.yml` workflow, are in `PUBLISHING.md`. Each language has one version source (`__version__`, `package.json` plus a test-enforced `VERSION` literal, and Go `Version`), and the User-Agent is built from it. The distribution name carries the org prefix only where the registry is flat; the import module (`secid_client`) and CLI command (`secid`) stay unprefixed. TypeScript is the only target with a build step (`tsc` → `dist/`) — Python and Go ship the single source file.
 
 ## Design Constraints
 
