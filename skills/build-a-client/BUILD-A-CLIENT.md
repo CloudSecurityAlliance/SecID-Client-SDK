@@ -200,7 +200,7 @@ The resolver can be a third-party, federated, or man-in-the-middled endpoint —
 Your client should:
 
 1. **Query-encode the whole SecID** (turns `#` into `%23`) — not a hand-rolled `#`→`%23` replace
-2. **Accept any HTTP 200 response** — the status field tells you what happened, not the HTTP code (HTTP 400 only for truly unparseable requests)
+2. **Accept any HTTP 200 response** — the status field tells you what happened, not the HTTP code. Even a missing or empty `secid` parameter comes back as HTTP 200 with `status: "error"`
 3. **Parse the JSON envelope** with all four fields
 4. **Handle all 5 status values** — at minimum, distinguish found/corrected (use results) from related/not_found/error (show guidance)
 5. **Distinguish result types** — check for `weight`+`url` vs `data`
@@ -226,7 +226,9 @@ function resolve(secid_string):
     body = response.read(MAX_RESPONSE + 1)
     if len(body) > MAX_RESPONSE:
         return error("Response exceeds 10 MB limit")
-    json = parse_json(body)
+    json = parse_json(body)                    # parse failure -> error, not a crash
+    if json is not an object:                  # null, [], "x" are not envelopes
+        return error("Invalid response")
     return {
         query: json.secid_query,
         status: json.status,
@@ -236,12 +238,12 @@ function resolve(secid_string):
 
 function best_url(secid_string):
     result = resolve(secid_string)
-    if result.status in ["found", "corrected"]:
-        # Untrusted response: keep numeric weights and valid http(s) URLs only,
-        # so a hostile top result falls through to the next valid one.
-        urls = [r for r in result.results
-                if is_number(r.weight) and is_valid_http_url(r.url)]
-        urls.sort_by(weight, descending)
-        return urls[0].url if urls else null
-    return null
+    # No status check needed: only found/corrected responses carry
+    # resolution results, so every other status falls through to null.
+    # Untrusted response: keep numeric weights and valid http(s) URLs only,
+    # so a hostile top result falls through to the next valid one.
+    urls = [r for r in result.results
+            if is_object(r) and is_number(r.weight) and is_valid_http_url(r.url)]
+    urls.sort_by(weight, descending)
+    return urls[0].url if urls else null
 ```

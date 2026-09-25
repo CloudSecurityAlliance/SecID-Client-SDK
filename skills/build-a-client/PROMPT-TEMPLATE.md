@@ -20,7 +20,7 @@ Examples:
 
 ### API Contract
 
-**One endpoint:** `GET https://secid.cloudsecurityalliance.org/api/v1/resolve?secid={encoded_secid}`
+**One endpoint is all a client needs:** `GET https://secid.cloudsecurityalliance.org/api/v1/resolve?secid={encoded_secid}`
 
 **No auth.** No API keys, no tokens, no special headers.
 
@@ -73,8 +73,10 @@ class SecIDClient:
         # Fully query-encode the secid, call API, return parsed response
 
     best_url(secid: string) → string | null
-        # Resolve, then return highest-weight URL from resolution results
-        # Returns null if status is not found/corrected or no resolution results
+        # Resolve, then return the highest-weight valid URL from resolution
+        # results, or null if there are none. No separate status check: only
+        # found/corrected responses carry resolution results, so related,
+        # not_found and error already yield null.
 
     lookup(type: string, identifier: string) → SecIDResponse
         # Convenience: resolve("secid:{type}/{identifier}")
