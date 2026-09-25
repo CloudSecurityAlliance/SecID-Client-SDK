@@ -413,11 +413,17 @@ def test_cli_survives_hostile_values(monkeypatch, capsys):
     import secid_client
 
     hostile = SecIDResponse(secid_query="q", status="corrected", results=[
-        {"secid": 42, "weight": 100, "url": "https://ok.example/\x1b[2J"},
+        {"secid": 42, "weight": 100, "url": "https://ok.example/"},
     ])
     monkeypatch.setattr(secid_client.SecIDClient, "resolve", lambda self, s: hostile)
     monkeypatch.setattr(secid_client.sys, "argv", ["secid", "secid:x/y/z"])
     secid_client.main()
     out = capsys.readouterr()
-    assert out.out.strip() == "https://ok.example/[2J"
+    assert out.out.strip() == "https://ok.example/"
     assert "corrected to: 42" in out.err
+
+
+def test_unpaired_surrogate_secid():
+    resp = SecIDClient("http://127.0.0.1:1", timeout=2).resolve("secid:x/y/\ud800")
+    assert resp.status == "error"
+    assert "Unicode" in resp.message

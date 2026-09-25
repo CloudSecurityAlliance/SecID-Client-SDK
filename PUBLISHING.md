@@ -40,7 +40,7 @@ From `typescript/`:
 ```bash
 cd typescript
 npm ci                       # clean install of dev deps (tsc, types)
-npm test                     # tsc build + node --test (24 tests)
+npm test                     # tsc build + node --test
 npm publish --dry-run        # inspect the tarball — expect 11 files, NO *.test.*
 npm publish                  # real publish (access:public is already in package.json)
 ```

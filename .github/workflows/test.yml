@@ -2,7 +2,7 @@ name: Test
 
 # Runs the fixture-driven test suite across all three language implementations
 # (Python, TypeScript, Go). Each implementation reads the shared tests/fixtures.json
-# and runs the same 21 behavioral test cases against a per-language mock server.
+# and runs the same 35 behavioral test cases against a per-language mock server.
 #
 # The shared-fixtures pattern is the SDK's main quality safeguard: identical
 # expected behavior across languages means drift between Python, TypeScript,

@@ -154,29 +154,64 @@ func (r *Response) UnmarshalJSON(b []byte) error {
 }
 
 // allowedURLSchemes — the resolver response is untrusted (a hostile, federated,
-// or MITM'd resolver is in scope); only http(s) URLs may be surfaced as a best URL.
+// or MITM'd resolver is in scope); only absolute http(s) URLs may be surfaced.
 var allowedURLSchemes = map[string]bool{"https": true, "http": true}
 
-// validateURL returns u only if it is an absolute http(s) URL, else "".
+// validateURL returns u only if it is an absolute http(s) URL with a host,
+// else "".
+//
+// Rules (identical in the Python, TypeScript and Go clients):
+//  1. a non-empty string with no ASCII control characters or spaces;
+//  2. begins with "http://" or "https://" (scheme case-insensitive);
+//  3. the authority (up to the first "/", "?", "#" or backslash), minus any
+//     "userinfo@", is non-empty and does not start with ":".
+//
+// The check is done by hand rather than with url.Parse so that all three
+// clients agree: parsers differ on inputs such as "http:evil" or a malformed
+// percent-escape, which url.Parse rejects and a WHATWG parser accepts.
 func validateURL(u string) string {
 	if u == "" {
 		return ""
 	}
-	parsed, err := url.Parse(u)
-	if err != nil || !allowedURLSchemes[strings.ToLower(parsed.Scheme)] || parsed.Host == "" {
+	for i := 0; i < len(u); i++ {
+		if u[i] <= 0x20 || u[i] == 0x7f {
+			return ""
+		}
+	}
+	sep := strings.Index(u, "://")
+	if sep == -1 || !allowedURLSchemes[strings.ToLower(u[:sep])] {
+		return ""
+	}
+	rest := u[sep+3:]
+	authority := rest
+	if end := strings.IndexAny(rest, "/?#\\"); end != -1 {
+		authority = rest[:end]
+	}
+	host := authority[strings.LastIndex(authority, "@")+1:]
+	if host == "" || strings.HasPrefix(host, ":") {
 		return ""
 	}
 	return u
 }
 
-// BestURL returns the highest-weight URL from resolution results, or empty string.
-// The URL is scheme-validated (http/https only) before being returned.
+// encodeSecID percent-encodes a SecID for the secid query parameter.
+// url.QueryEscape encodes a space as "+"; replacing it with "%20" makes the
+// output byte-identical to the Python and TypeScript clients. This is safe
+// because QueryEscape encodes a literal "+" as "%2B", so every "+" left in its
+// output came from a space.
+func encodeSecID(secid string) string {
+	return strings.ReplaceAll(url.QueryEscape(secid), "+", "%20")
+}
+
+// BestURL returns the highest-weight valid URL from resolution results, or
+// empty string. Only absolute http(s) URLs count (see validateURL); if the top
+// result carries a hostile or malformed URL, the next valid one is returned.
 func (r *Response) BestURL() string {
 	resolved := r.ResolutionResults()
 	if len(resolved) == 0 {
 		return ""
 	}
-	return validateURL(resolved[0].URL)
+	return resolved[0].URL
 }
 
 // WasCorrected returns true if the server corrected the input.
@@ -184,11 +219,13 @@ func (r *Response) WasCorrected() bool {
 	return r.Status == "corrected"
 }
 
-// ResolutionResults returns only results with weight + url, sorted by weight descending.
+// ResolutionResults returns only results with a numeric weight and a valid
+// http(s) URL, sorted by weight descending. Results whose URL fails validation
+// (javascript:, data:, relative, ...) are dropped.
 func (r *Response) ResolutionResults() []Result {
 	var resolved []Result
 	for _, res := range r.Results {
-		if res.HasWeight() && res.URL != "" {
+		if res.HasWeight() && validateURL(res.URL) != "" {
 			resolved = append(resolved, res)
 		}
 	}
@@ -227,9 +264,10 @@ func NewClient(baseURL string) *Client {
 }
 
 // Resolve resolves a SecID string to URL(s).
-// The # character is automatically encoded as %23 in the query parameter.
+// The whole SecID is percent-encoded (so # becomes %23, & becomes %26, a space
+// becomes %20).
 func (c *Client) Resolve(secid string) (*Response, error) {
-	encoded := url.QueryEscape(secid)
+	encoded := encodeSecID(secid)
 	reqURL := fmt.Sprintf("%s/api/v1/resolve?secid=%s", c.BaseURL, encoded)
 
 	req, err := http.NewRequest("GET", reqURL, nil)

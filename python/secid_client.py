@@ -64,13 +64,14 @@ class SecIDResponse:
 
     @property
     def best_url(self) -> str | None:
-        """Highest-weight URL from resolution results, or None.
+        """Highest-weight valid URL from resolution results, or None.
 
-        The chosen URL is scheme-validated (https/http only) before being
-        returned; a hostile-scheme or relative URL from the resolver yields None.
+        Only absolute http(s) URLs count (see _validate_url). If the top
+        result carries a hostile or malformed URL, the next valid one is
+        returned instead of None.
         """
         resolved = self.resolution_results
-        return _validate_url(resolved[0]["url"]) if resolved else None
+        return resolved[0]["url"] if resolved else None
 
     @property
     def was_corrected(self) -> bool:
@@ -79,13 +80,14 @@ class SecIDResponse:
 
     @property
     def resolution_results(self) -> list[dict[str, Any]]:
-        """Only results with a numeric weight and a string url, sorted by
-        weight descending. Entries with a missing, null, or non-numeric
-        weight are not resolution results and are left out."""
+        """Only results with a numeric weight and a valid http(s) url, sorted
+        by weight descending. Entries with a missing, null, or non-numeric
+        weight, or a url that fails _validate_url (javascript:, data:,
+        relative, ...), are left out."""
         return sorted(
             [r for r in self.results
              if isinstance(r, dict) and _is_weight(r.get("weight"))
-             and isinstance(r.get("url"), str)],
+             and _validate_url(r.get("url")) is not None],
             key=lambda r: r["weight"],
             reverse=True,
         )
@@ -103,20 +105,36 @@ def _is_weight(value: Any) -> bool:
 
 
 # The resolver response is untrusted (a hostile, federated, or MITM'd resolver
-# is in scope). Only these schemes may be surfaced as a "best URL"; anything
-# else (javascript:, data:, file:, ...) or a scheme-less/relative URL is rejected.
+# is in scope). Only absolute http(s) URLs may be surfaced. The check is done
+# by hand rather than with urlparse so that all three reference clients apply
+# exactly the same rule; parsers disagree on inputs such as "http:evil",
+# "http:///evil" and "http:\\evil" (a WHATWG parser accepts all three).
 ALLOWED_URL_SCHEMES = frozenset({"https", "http"})
 
 
 def _validate_url(url: Any) -> str | None:
-    """Return url only if it is an absolute http(s) URL, else None."""
+    """Return url only if it is an absolute http(s) URL with a host, else None.
+
+    Rules (identical in the Python, TypeScript and Go clients):
+      1. a non-empty string with no ASCII control characters or spaces;
+      2. begins with "http://" or "https://" (scheme case-insensitive);
+      3. the authority (up to the first "/", "?", "#" or backslash), minus
+         any "userinfo@", is non-empty and does not start with ":".
+    """
     if not isinstance(url, str) or not url:
         return None
-    try:
-        parsed = urllib.parse.urlparse(url)
-    except ValueError:
+    if any(ord(ch) <= 0x20 or ord(ch) == 0x7F for ch in url):
         return None
-    if parsed.scheme.lower() not in ALLOWED_URL_SCHEMES or not parsed.netloc:
+    scheme, sep, rest = url.partition("://")
+    if not sep or scheme.lower() not in ALLOWED_URL_SCHEMES:
+        return None
+    end = len(rest)
+    for delim in "/?#\\":
+        i = rest.find(delim)
+        if i != -1:
+            end = min(end, i)
+    host = rest[:end].rpartition("@")[2]
+    if not host or host.startswith(":"):
         return None
     return url
 
@@ -190,11 +208,14 @@ class SecIDClient:
             raises for network, HTTP, or response-format problems: those come
             back as status="error" with an explanatory message.
         """
-        encoded = urllib.parse.quote(secid, safe="")
-        url = f"{self.base_url}/api/v1/resolve?secid={encoded}"
-
         def error(message: str) -> SecIDResponse:
             return SecIDResponse(secid_query=secid, status="error", message=message)
+
+        try:
+            encoded = urllib.parse.quote(secid, safe="")
+        except UnicodeEncodeError:  # a lone surrogate cannot be UTF-8 encoded
+            return error("SecID is not valid Unicode (unpaired surrogate)")
+        url = f"{self.base_url}/api/v1/resolve?secid={encoded}"
 
         # Every failure mode becomes status="error"; resolve() never raises.
         # OSError covers URLError, socket timeouts, and connection resets;

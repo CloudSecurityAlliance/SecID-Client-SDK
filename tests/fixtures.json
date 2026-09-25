@@ -609,6 +609,477 @@
         "registry_result_count": 1,
         "message": null
       }
+    },
+    {
+      "name": "encoding_ampersand",
+      "description": "An unencoded & would end the secid parameter early (the server then sees '...#A'). All three clients must send %26, plus %40 for @ and %23 for #. request_url_contains is the whole encoded query, so the encodings must be byte-identical across languages.",
+      "category": "encoding",
+      "input": {
+        "secid": "secid:control/cloudsecurityalliance.org/ccm@4.0#A&A-01",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:control/cloudsecurityalliance.org/ccm@4.0#A&A-01",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:control/cloudsecurityalliance.org/ccm@4.0#A&A-01",
+              "weight": 100,
+              "url": "https://cloudsecurityalliance.org/research/cloud-controls-matrix"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://cloudsecurityalliance.org/research/cloud-controls-matrix",
+        "resolution_result_count": 1,
+        "request_url_contains": "secid=secid%3Acontrol%2Fcloudsecurityalliance.org%2Fccm%404.0%23A%26A-01"
+      }
+    },
+    {
+      "name": "encoding_plus",
+      "description": "A literal + must be sent as %2B. Left bare, a query parser decodes it as a space.",
+      "category": "encoding",
+      "input": {
+        "secid": "secid:reference/example.org/c++#section+1",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:reference/example.org/c++#section+1",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:reference/example.org/c++#section+1",
+              "weight": 100,
+              "url": "https://example.org/c++/section-1"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://example.org/c++/section-1",
+        "resolution_result_count": 1,
+        "request_url_contains": "secid=secid%3Areference%2Fexample.org%2Fc%2B%2B%23section%2B1"
+      }
+    },
+    {
+      "name": "encoding_space",
+      "description": "A space is sent as %20, never +. The server accepts both, but the reference clients must agree byte for byte (Go's url.QueryEscape emits + by default).",
+      "category": "encoding",
+      "input": {
+        "secid": "secid:reference/example.org/doc#Annex A",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:reference/example.org/doc#Annex A",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:reference/example.org/doc#Annex A",
+              "weight": 100,
+              "url": "https://example.org/doc#annex-a"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://example.org/doc#annex-a",
+        "resolution_result_count": 1,
+        "request_url_contains": "secid=secid%3Areference%2Fexample.org%2Fdoc%23Annex%20A",
+        "request_url_not_contains": "+"
+      }
+    },
+    {
+      "name": "encoding_percent",
+      "description": "A literal % is encoded as %25, so an identifier that already contains '%20' is sent as '%2520' and is not decoded into a space.",
+      "category": "encoding",
+      "input": {
+        "secid": "secid:reference/example.org/doc#rate%20limit",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:reference/example.org/doc#rate%20limit",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:reference/example.org/doc#rate%20limit",
+              "weight": 100,
+              "url": "https://example.org/doc/rate-limit"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://example.org/doc/rate-limit",
+        "resolution_result_count": 1,
+        "request_url_contains": "secid=secid%3Areference%2Fexample.org%2Fdoc%23rate%2520limit"
+      }
+    },
+    {
+      "name": "encoding_at_version",
+      "description": "@ (the version separator) is encoded as %40 with the rest of the SecID; the server, not the client, splits name from version.",
+      "category": "encoding",
+      "input": {
+        "secid": "secid:weakness/owasp.org/top10@2021#A01",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:weakness/owasp.org/top10@2021#A01",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:weakness/owasp.org/top10@2021#A01",
+              "weight": 100,
+              "url": "https://owasp.org/Top10/A01_2021-Broken_Access_Control/"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://owasp.org/Top10/A01_2021-Broken_Access_Control/",
+        "resolution_result_count": 1,
+        "request_url_contains": "secid=secid%3Aweakness%2Fowasp.org%2Ftop10%402021%23A01"
+      }
+    },
+    {
+      "name": "encoding_rfc3986_strict",
+      "description": "The clients encode everything except A-Z a-z 0-9 - _ . ~ and encode non-ASCII as UTF-8. JavaScript's encodeURIComponent leaves !'()* bare, so the TypeScript client encodes those as well.",
+      "category": "encoding",
+      "input": {
+        "secid": "secid:reference/example.org/doc#it's (1)!*~é",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:reference/example.org/doc#it's (1)!*~é",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:reference/example.org/doc#it's (1)!*~é",
+              "weight": 100,
+              "url": "https://example.org/doc"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://example.org/doc",
+        "resolution_result_count": 1,
+        "request_url_contains": "secid=secid%3Areference%2Fexample.org%2Fdoc%23it%27s%20%281%29%21%2A~%C3%A9"
+      }
+    },
+    {
+      "name": "best_url_skips_invalid_top_url",
+      "description": "The resolver is untrusted. When higher-weight results carry hostile or malformed URLs, best_url falls through to the highest-weight valid http(s) URL instead of returning null, and resolution_results leaves the invalid entries out. The list covers parser-disagreement cases (http:evil, http:///evil, a backslash authority) that a WHATWG parser would accept.",
+      "category": "edge_case",
+      "input": {
+        "secid": "secid:advisory/example.org/adv#ADV-1",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/example.org/adv#ADV-1",
+          "status": "found",
+          "results": [
+            {
+              "secid": "s",
+              "weight": 100,
+              "url": "javascript:alert(1)"
+            },
+            {
+              "secid": "s",
+              "weight": 99,
+              "url": "data:text/html,<script>alert(1)</script>"
+            },
+            {
+              "secid": "s",
+              "weight": 98,
+              "url": "file:///etc/passwd"
+            },
+            {
+              "secid": "s",
+              "weight": 97,
+              "url": "//evil.example/x"
+            },
+            {
+              "secid": "s",
+              "weight": 96,
+              "url": "http:evil.example"
+            },
+            {
+              "secid": "s",
+              "weight": 95,
+              "url": "http:///evil.example"
+            },
+            {
+              "secid": "s",
+              "weight": 94,
+              "url": "http:\\\\evil.example"
+            },
+            {
+              "secid": "s",
+              "weight": 93,
+              "url": "https://"
+            },
+            {
+              "secid": "s",
+              "weight": 92,
+              "url": " https://evil.example/"
+            },
+            {
+              "secid": "s",
+              "weight": 91,
+              "url": "https://evil.example/\u001b[2J"
+            },
+            {
+              "secid": "s",
+              "weight": 80,
+              "url": "https://ok.example/adv/ADV-1"
+            },
+            {
+              "secid": "s",
+              "weight": 70,
+              "url": "HTTP://ALSO-OK.example/adv/ADV-1"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://ok.example/adv/ADV-1",
+        "resolution_result_count": 2,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "best_url_all_invalid",
+      "description": "Every URL is hostile: best_url is null and there are no resolution results.",
+      "category": "edge_case",
+      "input": {
+        "secid": "secid:advisory/example.org/adv#ADV-2",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/example.org/adv#ADV-2",
+          "status": "found",
+          "results": [
+            {
+              "secid": "s",
+              "weight": 100,
+              "url": "javascript:alert(1)"
+            },
+            {
+              "secid": "s",
+              "weight": 50,
+              "url": "/relative/path"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": null,
+        "resolution_result_count": 0,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "edge_mixed_weight_types",
+      "description": "Non-object entries are ignored; string, null and boolean weights are not resolution results; a fractional weight is valid. The response must not be rejected as a whole.",
+      "category": "edge_case",
+      "input": {
+        "secid": "secid:advisory/example.org/adv#ADV-3",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/example.org/adv#ADV-3",
+          "status": "found",
+          "results": [
+            17,
+            "junk",
+            null,
+            [
+              1,
+              2
+            ],
+            {
+              "secid": "a",
+              "weight": "high",
+              "url": "https://a.example/"
+            },
+            {
+              "secid": "b",
+              "weight": null,
+              "url": "https://b.example/"
+            },
+            {
+              "secid": "c",
+              "weight": true,
+              "url": "https://c.example/"
+            },
+            {
+              "secid": "d",
+              "weight": 87.5,
+              "url": "https://d.example/"
+            },
+            {
+              "secid": "e",
+              "weight": 90,
+              "url": "https://e.example/"
+            },
+            {
+              "secid": "f",
+              "weight": 99,
+              "url": 12345
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://e.example/",
+        "resolution_result_count": 2,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "edge_results_not_array",
+      "description": "A non-array results value is treated as no results, not a crash.",
+      "category": "edge_case",
+      "input": {
+        "secid": "secid:advisory/example.org/adv#ADV-4",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/example.org/adv#ADV-4",
+          "status": "found",
+          "results": {
+            "not": "an array"
+          },
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": null,
+        "resolution_result_count": 0,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "edge_message_not_string",
+      "description": "A non-string message is dropped rather than passed through to code that expects text.",
+      "category": "edge_case",
+      "input": {
+        "secid": "secid:advisory/example.org/adv#ADV-5",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/example.org/adv#ADV-5",
+          "status": "not_found",
+          "results": [],
+          "message": {
+            "text": "hi"
+          }
+        }
+      },
+      "expected": {
+        "status": "not_found",
+        "best_url": null,
+        "resolution_result_count": 0,
+        "registry_result_count": 0,
+        "message": null
+      }
+    },
+    {
+      "name": "client_null_body",
+      "description": "A JSON null body is not a SecID envelope and is an error, not an empty response.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "raw_body": "null",
+        "content_type": "application/json"
+      },
+      "expected": {
+        "raises_error": true
+      }
+    },
+    {
+      "name": "client_array_body",
+      "description": "A JSON array body is not a SecID envelope and is an error.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "raw_body": "[]",
+        "content_type": "application/json"
+      },
+      "expected": {
+        "raises_error": true
+      }
+    },
+    {
+      "name": "client_missing_status",
+      "description": "A JSON object with no status field is reported as status=error.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "raw_body": "{}",
+        "content_type": "application/json"
+      },
+      "expected": {
+        "raises_error": true
+      }
     }
   ]
 }
