@@ -258,3 +258,126 @@ describe("bestUrl URL validation", () => {
     assert.equal(r.bestUrl, "https://example.com/ok");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Hostile resolver responses (audit finding H3). The resolver is untrusted:
+// none of these may throw, and every getter must work on the result.
+// ---------------------------------------------------------------------------
+
+interface RawMock { status?: number; body: string | Buffer; stallMs?: number }
+let rawMock: RawMock = { body: "" };
+const rawServer = http.createServer((req, res) => {
+  if (rawMock.stallMs) {
+    // Headers now, body never: a read timeout, not a connect timeout.
+    res.writeHead(200, { "Content-Type": "application/json", "Content-Length": "100" });
+    res.write('{"status":');
+    const t = setTimeout(() => res.destroy(), rawMock.stallMs);
+    res.on("close", () => clearTimeout(t));
+    return;
+  }
+  res.writeHead(rawMock.status ?? 200, { "Content-Type": "application/json" });
+  res.end(rawMock.body);
+});
+const rawPort: number = await new Promise((resolve) => {
+  rawServer.listen(0, "127.0.0.1", () => resolve((rawServer.address() as { port: number }).port));
+});
+after(() => { rawServer.closeAllConnections?.(); rawServer.close(); });
+
+async function resolveRaw(mock: RawMock, timeoutMs = 5000): Promise<SecIDResponse> {
+  rawMock = mock;
+  const resp = await new SecIDClient(`http://127.0.0.1:${rawPort}`, timeoutMs).resolve("secid:x/y/z");
+  // Touch every getter; none may throw.
+  void resp.bestUrl; void resp.wasCorrected; void resp.resolutionResults; void resp.registryResults;
+  return resp;
+}
+
+describe("hostile resolver responses", () => {
+  for (const [name, body] of [
+    ["null", "null"], ["array", "[]"], ["number", "42"], ["string", '"found"'],
+    ["bool", "true"], ["empty", ""], ["whitespace", "   "],
+  ]) {
+    it(`non-object body (${name}) is an error`, async () => {
+      const resp = await resolveRaw({ body });
+      assert.equal(resp.status, "error");
+      assert.deepEqual(resp.results, []);
+    });
+  }
+
+  it("labels a non-JSON 200 body as invalid, not a connection error", async () => {
+    const resp = await resolveRaw({ body: "<html>Bad Gateway</html>" });
+    assert.equal(resp.status, "error");
+    assert.match(resp.message ?? "", /^Invalid response/);
+  });
+
+  it("reports the HTTP status for a non-JSON error body", async () => {
+    const resp = await resolveRaw({ status: 502, body: "<html>Bad Gateway</html>" });
+    assert.equal(resp.status, "error");
+    assert.match(resp.message ?? "", /^HTTP 502/);
+  });
+
+  it("reports the HTTP status for a null body on an error status", async () => {
+    const resp = await resolveRaw({ status: 500, body: "null" });
+    assert.equal(resp.status, "error");
+    assert.match(resp.message ?? "", /^HTTP 500/);
+  });
+
+  it("falls back to defaults for wrongly typed envelope fields", async () => {
+    const resp = await resolveRaw({
+      body: JSON.stringify({ secid_query: 7, status: ["found"], results: { a: 1 }, message: 5 }),
+    });
+    assert.equal(resp.secidQuery, "secid:x/y/z");
+    assert.equal(resp.status, "error");
+    assert.deepEqual(resp.results, []);
+    assert.equal(resp.message, undefined);
+  });
+
+  it("drops non-object results and ignores null/string/bool weights", async () => {
+    const resp = await resolveRaw({
+      body: JSON.stringify({
+        status: "found",
+        results: [
+          17, "junk", null, [1, 2],
+          { secid: "a", weight: null, url: "https://a.example/" },
+          { secid: "b", weight: "99", url: "https://b.example/" },
+          { secid: "c", weight: true, url: "https://c.example/" },
+          { secid: "d", weight: 87.5, url: "https://d.example/" },
+          { secid: "e", weight: 90, url: "https://e.example/" },
+          { secid: "f", weight: 99, url: 12345 },
+          { secid: "g", data: { k: "v" } },
+        ],
+      }),
+    });
+    assert.equal(resp.status, "found");
+    assert.equal(resp.results.length, 7);
+    assert.deepEqual(resp.resolutionResults.map((r) => r.secid), ["e", "d"]);
+    assert.equal(resp.bestUrl, "https://e.example/");
+    assert.equal(resp.registryResults.length, 1);
+  });
+
+  it("decodes a non-UTF-8 body without throwing", async () => {
+    const resp = await resolveRaw({ body: Buffer.from([0xff, 0xfe, 0xfa, 0x20, 0x78]) });
+    assert.equal(resp.status, "error");
+  });
+
+  it("times out while reading a stalled body", async () => {
+    const resp = await resolveRaw({ body: "", stallMs: 3000 }, 500);
+    assert.equal(resp.status, "error");
+    assert.match(resp.message ?? "", /timeout/i);
+  });
+
+  it("returns an error for an unusable base URL", async () => {
+    for (const base of ["not a url", "ftp://example.com", ""]) {
+      const resp = await new SecIDClient(base, 2000).resolve("secid:x/y/z");
+      assert.equal(resp.status, "error", `base URL ${JSON.stringify(base)}`);
+    }
+  });
+
+  it("tolerates non-array results passed to the constructor", () => {
+    const r = new SecIDResponse({
+      secid_query: "x", status: "found",
+      results: "nope" as unknown as [],
+    });
+    assert.deepEqual(r.results, []);
+    assert.equal(r.bestUrl, undefined);
+  });
+});
