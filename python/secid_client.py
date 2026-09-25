@@ -26,7 +26,10 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
+import http.client
 import json
+import math
+import socket
 import sys
 import urllib.error
 import urllib.parse
@@ -76,9 +79,13 @@ class SecIDResponse:
 
     @property
     def resolution_results(self) -> list[dict[str, Any]]:
-        """Only results with weight + url, sorted by weight descending."""
+        """Only results with a numeric weight and a string url, sorted by
+        weight descending. Entries with a missing, null, or non-numeric
+        weight are not resolution results and are left out."""
         return sorted(
-            [r for r in self.results if "weight" in r and "url" in r],
+            [r for r in self.results
+             if isinstance(r, dict) and _is_weight(r.get("weight"))
+             and isinstance(r.get("url"), str)],
             key=lambda r: r["weight"],
             reverse=True,
         )
@@ -86,7 +93,13 @@ class SecIDResponse:
     @property
     def registry_results(self) -> list[dict[str, Any]]:
         """Only results with data (registry/browsing info)."""
-        return [r for r in self.results if "data" in r]
+        return [r for r in self.results if isinstance(r, dict) and "data" in r]
+
+
+def _is_weight(value: Any) -> bool:
+    """True for a finite int/float. bool is excluded (it is an int subclass)."""
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
 
 
 # The resolver response is untrusted (a hostile, federated, or MITM'd resolver
@@ -108,12 +121,48 @@ def _validate_url(url: Any) -> str | None:
     return url
 
 
-def _sanitize_terminal(text: str) -> str:
+def _sanitize_terminal(text: Any) -> str:
     """Strip C0/C1 control chars (incl. ESC) from server-controlled text before
-    printing to a terminal — prevents ANSI/escape-sequence injection."""
+    printing to a terminal — prevents ANSI/escape-sequence injection.
+
+    Accepts any value: a hostile resolver can send a number or object where a
+    string is expected, and printing it must not crash the CLI."""
+    if not isinstance(text, str):
+        text = "" if text is None else str(text)
     return "".join(
         ch for ch in text
         if not (ord(ch) < 0x20 or ord(ch) == 0x7F or 0x80 <= ord(ch) <= 0x9F)
+    )
+
+
+_INVALID = object()
+
+# socket.timeout is an alias of TimeoutError from 3.10; on 3.9 it is a
+# separate OSError subclass.
+_TIMEOUTS = (TimeoutError, socket.timeout)
+
+
+def _parse_json(body: bytes) -> Any:
+    """Decode a response body as JSON, returning _INVALID on any failure."""
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, RecursionError):
+        return _INVALID
+
+
+def _envelope(data: dict[str, Any], secid: str) -> SecIDResponse:
+    """Build a SecIDResponse from an untrusted JSON object, type-checking each
+    field. Wrong-typed fields fall back to defaults; non-object results are
+    dropped so the result helpers never see them."""
+    query = data.get("secid_query")
+    status = data.get("status")
+    message = data.get("message")
+    results = data.get("results")
+    return SecIDResponse(
+        secid_query=query if isinstance(query, str) else secid,
+        status=status if isinstance(status, str) and status else "error",
+        results=[r for r in results if isinstance(r, dict)] if isinstance(results, list) else [],
+        message=message if isinstance(message, str) else None,
     )
 
 
@@ -137,53 +186,59 @@ class SecIDClient:
             secid: Full SecID string, e.g. "secid:advisory/mitre.org/cve#CVE-2021-44228"
 
         Returns:
-            SecIDResponse with status, results, and optional message.
+            SecIDResponse with status, results, and optional message. Never
+            raises for network, HTTP, or response-format problems: those come
+            back as status="error" with an explanatory message.
         """
         encoded = urllib.parse.quote(secid, safe="")
         url = f"{self.base_url}/api/v1/resolve?secid={encoded}"
-        req = urllib.request.Request(url, headers={
-            "Accept": "application/json",
-            "User-Agent": "secid-python-client/1.0",
-        })
+
+        def error(message: str) -> SecIDResponse:
+            return SecIDResponse(secid_query=secid, status="error", message=message)
+
+        # Every failure mode becomes status="error"; resolve() never raises.
+        # OSError covers URLError, socket timeouts, and connection resets;
+        # HTTPException covers malformed HTTP (IncompleteRead, BadStatusLine);
+        # ValueError covers an unusable base_url ("unknown url type").
         try:
+            req = urllib.request.Request(url, headers={
+                "Accept": "application/json",
+                "User-Agent": "secid-python-client/1.0",
+            })
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 body = resp.read(MAX_RESPONSE_BYTES + 1)
-                if len(body) > MAX_RESPONSE_BYTES:
-                    return SecIDResponse(
-                        secid_query=secid,
-                        status="error",
-                        message=f"Response exceeds {MAX_RESPONSE_BYTES} byte limit",
-                    )
-                try:
-                    data = json.loads(body.decode())
-                except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as e:
-                    return SecIDResponse(
-                        secid_query=secid,
-                        status="error",
-                        message=f"Invalid response (not JSON): {e}",
-                    )
         except urllib.error.HTTPError as e:
-            err_body = e.read(MAX_RESPONSE_BYTES).decode()
+            # Non-2xx: the resolver may still send a JSON envelope.
             try:
-                data = json.loads(err_body)
-            except (json.JSONDecodeError, ValueError):
-                return SecIDResponse(
-                    secid_query=secid,
-                    status="error",
-                    message=f"HTTP {e.code}: {err_body[:200]}",
-                )
+                body = e.read(MAX_RESPONSE_BYTES + 1)
+            except (OSError, http.client.HTTPException, ValueError) as read_err:
+                return error(f"HTTP {e.code}: error reading body: {read_err}")
+            data = _parse_json(body)
+            if not isinstance(data, dict):
+                text = body[:200].decode("utf-8", errors="replace")
+                return error(f"HTTP {e.code}: {text}")
+            return _envelope(data, secid)
         except urllib.error.URLError as e:
-            return SecIDResponse(
-                secid_query=secid,
-                status="error",
-                message=f"Connection error: {e.reason}",
-            )
-        return SecIDResponse(
-            secid_query=data.get("secid_query", secid),
-            status=data.get("status", "error"),
-            results=data.get("results", []),
-            message=data.get("message"),
-        )
+            if isinstance(e.reason, _TIMEOUTS):
+                return error(f"Request timeout after {self.timeout}s: {e.reason}")
+            return error(f"Connection error: {e.reason}")
+        except _TIMEOUTS as e:
+            # A timeout while waiting for or reading the response is raised
+            # bare, not wrapped in URLError.
+            return error(f"Request timeout after {self.timeout}s: {e}")
+        except (OSError, http.client.HTTPException) as e:
+            return error(f"Connection error: {e}")
+        except ValueError as e:
+            return error(f"Invalid request URL {url!r}: {e}")
+
+        if len(body) > MAX_RESPONSE_BYTES:
+            return error(f"Response exceeds {MAX_RESPONSE_BYTES} byte limit")
+        data = _parse_json(body)
+        if data is _INVALID:
+            return error("Invalid response (not JSON)")
+        if not isinstance(data, dict):
+            return error(f"Invalid response: expected a JSON object, got {type(data).__name__}")
+        return _envelope(data, secid)
 
     def best_url(self, secid: str) -> str | None:
         """Resolve a SecID and return the highest-weight URL, or None."""

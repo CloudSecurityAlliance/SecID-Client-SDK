@@ -154,19 +154,13 @@ def test_fixture(fixture, mock_server):
     client = SecIDClient(base_url=f"http://127.0.0.1:{port}", timeout=timeout)
 
     if expected.get("raises_error"):
-        # Client should either raise OR return status="error"
-        try:
-            resp = client.resolve(fixture["input"]["secid"])
-            assert resp.status == "error", (
-                f"Expected error status or exception, got status={resp.status}"
+        # The Python client never raises: every failure is status="error".
+        resp = client.resolve(fixture["input"]["secid"])
+        assert resp.status == "error", f"Expected error status, got status={resp.status}"
+        if "error_contains" in expected:
+            assert resp.message and expected["error_contains"].lower() in resp.message.lower(), (
+                f"Expected '{expected['error_contains']}' in message: {resp.message}"
             )
-            # Check error_contains if specified
-            if "error_contains" in expected and resp.message:
-                assert expected["error_contains"].lower() in resp.message.lower(), (
-                    f"Expected '{expected['error_contains']}' in message: {resp.message}"
-                )
-        except Exception:
-            pass  # Exception is acceptable for error tests
         return
 
     # Normal test: call resolve and check expected fields
@@ -234,11 +228,8 @@ def test_fixture(fixture, mock_server):
 def test_connection_refused(fixture):
     # Point client at a port where nothing is listening
     client = SecIDClient(base_url="http://127.0.0.1:1", timeout=2)
-    try:
-        resp = client.resolve(fixture["input"]["secid"])
-        assert resp.status == "error"
-    except Exception:
-        pass  # Exception is also acceptable
+    resp = client.resolve(fixture["input"]["secid"])
+    assert resp.status == "error"
 
 
 # ── Untrusted-response hardening (audit findings F-08, F-10-02) ──
@@ -268,3 +259,165 @@ def test_best_url_rejects_hostile_scheme():
 def test_sanitize_terminal_strips_control_chars():
     assert _sanitize_terminal("https://x/\x1b[2Jfake") == "https://x/[2Jfake"
     assert _sanitize_terminal("plain text") == "plain text"
+
+
+def test_sanitize_terminal_accepts_non_strings():
+    assert _sanitize_terminal(123) == "123"
+    assert _sanitize_terminal(None) == ""
+    assert isinstance(_sanitize_terminal({"a": 1}), str)
+
+
+# ── Hostile resolver responses (audit finding H2) ──
+#
+# The resolver is untrusted. None of these may raise; each must come back as
+# a SecIDResponse whose helpers work.
+
+import socketserver  # noqa: E402
+
+
+class _RawHandler(BaseHTTPRequestHandler):
+    status = 200
+    body = b""
+    delay = 0.0
+    truncate = False
+
+    def do_GET(self):
+        if _RawHandler.delay:
+            # Send headers promptly, then stall mid-body: a read timeout,
+            # not a connect timeout.
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", "100")
+            self.end_headers()
+            self.wfile.write(b'{"status":')
+            self.wfile.flush()
+            time.sleep(_RawHandler.delay)
+            return
+        self.send_response(_RawHandler.status)
+        self.send_header("Content-Type", "application/json")
+        if _RawHandler.truncate:
+            self.send_header("Content-Length", str(len(_RawHandler.body) + 50))
+        self.end_headers()
+        self.wfile.write(_RawHandler.body)
+
+    def log_message(self, format, *args):
+        pass
+
+
+class _ThreadedServer(socketserver.ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
+
+@pytest.fixture(scope="module")
+def raw_server():
+    server = _ThreadedServer(("127.0.0.1", 0), _RawHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+
+
+def _serve(body, status=200, delay=0.0, truncate=False):
+    _RawHandler.body = body if isinstance(body, bytes) else json.dumps(body).encode()
+    _RawHandler.status = status
+    _RawHandler.delay = delay
+    _RawHandler.truncate = truncate
+
+
+def _exercise(resp):
+    """Touch every helper; none may raise on a hostile response."""
+    resp.best_url, resp.was_corrected, resp.resolution_results, resp.registry_results
+    return resp
+
+
+@pytest.mark.parametrize("body", [
+    b"null", b"[]", b"42", b'"found"', b"true", b"", b"   ",
+], ids=["null", "array", "number", "string", "bool", "empty", "whitespace"])
+def test_non_object_body_is_error(raw_server, body):
+    _serve(body)
+    resp = _exercise(SecIDClient(raw_server, timeout=5).resolve("secid:x/y/z"))
+    assert resp.status == "error"
+    assert resp.results == []
+
+
+def test_wrongly_typed_envelope_fields(raw_server):
+    _serve({"secid_query": 7, "status": ["found"], "results": {"a": 1}, "message": 5})
+    resp = _exercise(SecIDClient(raw_server, timeout=5).resolve("secid:x/y/z"))
+    assert resp.secid_query == "secid:x/y/z"
+    assert resp.status == "error"
+    assert resp.results == []
+    assert resp.message is None
+
+
+def test_non_dict_results_and_mixed_weights(raw_server):
+    _serve({"status": "found", "results": [
+        17, "junk", None, [1, 2],
+        {"secid": "a", "weight": None, "url": "https://a.example/"},
+        {"secid": "b", "weight": "90", "url": "https://b.example/"},
+        {"secid": "c", "weight": True, "url": "https://c.example/"},
+        {"secid": "d", "weight": 87.5, "url": "https://d.example/"},
+        {"secid": "e", "weight": 90, "url": "https://e.example/"},
+        {"secid": "f", "weight": 99, "url": 12345},
+        {"secid": "g", "data": {"k": "v"}},
+    ]})
+    resp = _exercise(SecIDClient(raw_server, timeout=5).resolve("secid:x/y/z"))
+    assert resp.status == "found"
+    assert len(resp.results) == 7  # the four non-objects are dropped
+    assert [r["secid"] for r in resp.resolution_results] == ["e", "d"]
+    assert resp.best_url == "https://e.example/"
+    assert len(resp.registry_results) == 1
+
+
+def test_non_utf8_body(raw_server):
+    _serve(b"\xff\xfe\xfa not utf-8")
+    assert SecIDClient(raw_server, timeout=5).resolve("secid:x/y/z").status == "error"
+
+
+def test_non_utf8_error_body(raw_server):
+    _serve(b"\xff\xfe\xfa not utf-8", status=502)
+    resp = SecIDClient(raw_server, timeout=5).resolve("secid:x/y/z")
+    assert resp.status == "error"
+    assert resp.message.startswith("HTTP 502")
+
+
+def test_error_status_with_null_json_body(raw_server):
+    _serve(b"null", status=500)
+    resp = SecIDClient(raw_server, timeout=5).resolve("secid:x/y/z")
+    assert resp.status == "error"
+    assert resp.message.startswith("HTTP 500")
+
+
+def test_truncated_body(raw_server):
+    _serve(b'{"status": "fo', truncate=True)
+    assert SecIDClient(raw_server, timeout=5).resolve("secid:x/y/z").status == "error"
+
+
+def test_read_timeout_mid_body(raw_server):
+    _serve(b"", delay=3)
+    resp = SecIDClient(raw_server, timeout=1).resolve("secid:x/y/z")
+    assert resp.status == "error"
+    assert "timeout" in resp.message.lower()
+
+
+def test_deeply_nested_json(raw_server):
+    _serve(b"[" * 100000 + b"]" * 100000)
+    assert SecIDClient(raw_server, timeout=5).resolve("secid:x/y/z").status == "error"
+
+
+@pytest.mark.parametrize("base_url", ["not a url", "ftp://example.com", ""])
+def test_unusable_base_url(base_url):
+    resp = SecIDClient(base_url, timeout=2).resolve("secid:x/y/z")
+    assert resp.status == "error"
+
+
+def test_cli_survives_hostile_values(monkeypatch, capsys):
+    import secid_client
+
+    hostile = SecIDResponse(secid_query="q", status="corrected", results=[
+        {"secid": 42, "weight": 100, "url": "https://ok.example/\x1b[2J"},
+    ])
+    monkeypatch.setattr(secid_client.SecIDClient, "resolve", lambda self, s: hostile)
+    monkeypatch.setattr(secid_client.sys, "argv", ["secid", "secid:x/y/z"])
+    secid_client.main()
+    out = capsys.readouterr()
+    assert out.out.strip() == "https://ok.example/[2J"
+    assert "corrected to: 42" in out.err
