@@ -18,7 +18,11 @@
  *     console.log(response.bestUrl);
  */
 
-export const VERSION = "0.1.0";
+/**
+ * Library version. Must equal "version" in package.json — a test enforces it.
+ * Kept as a literal so this file still works when copied on its own.
+ */
+export const VERSION = "1.0.0";
 
 const DEFAULT_BASE_URL = "https://secid.cloudsecurityalliance.org";
 const DEFAULT_TIMEOUT_MS = 30_000; // 30 seconds
@@ -250,7 +254,7 @@ export class SecIDClient {
       const resp = await fetch(url, {
         headers: {
           Accept: "application/json",
-          "User-Agent": "secid-typescript-client/1.0",
+          "User-Agent": `secid-typescript-client/${VERSION}`,
         },
         signal: AbortSignal.timeout(this.timeoutMs),
       });

@@ -24,7 +24,9 @@ Usage as CLI:
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+# Single source of truth for the version: pyproject.toml reads it from here
+# (hatch dynamic version) and the User-Agent is built from it.
+__version__ = "1.0.0"
 
 import http.client
 import json
@@ -224,7 +226,7 @@ class SecIDClient:
         try:
             req = urllib.request.Request(url, headers={
                 "Accept": "application/json",
-                "User-Agent": "secid-python-client/1.0",
+                "User-Agent": f"secid-python-client/{__version__}",
             })
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 body = resp.read(MAX_RESPONSE_BYTES + 1)

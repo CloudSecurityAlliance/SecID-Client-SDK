@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { resolve as pathResolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { SecIDClient, SecIDResponse } from "./secid-client.js";
+import { SecIDClient, SecIDResponse, VERSION } from "./secid-client.js";
 
 // ---------------------------------------------------------------------------
 // Load fixtures
@@ -387,5 +387,12 @@ describe("SecID encoding", () => {
     const resp = await new SecIDClient("http://127.0.0.1:1", 2000).resolve("secid:x/y/\uD800");
     assert.equal(resp.status, "error");
     assert.match(resp.message ?? "", /Unicode/);
+  });
+});
+
+describe("version", () => {
+  it("VERSION matches package.json", () => {
+    const pkg = JSON.parse(readFileSync(pathResolve(__dirname, "..", "package.json"), "utf-8"));
+    assert.equal(VERSION, pkg.version);
   });
 });
