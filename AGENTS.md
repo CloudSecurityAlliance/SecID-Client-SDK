@@ -14,7 +14,7 @@ Run from repo root unless noted.
 - `cd typescript && npm ci && npm test`: TypeScript compile + Node test run.
 - `cd go && go test -v ./...`: Go fixture tests.
 - `python python/secid_client.py "<secid>"`
-- `npx tsx typescript/src/secid-client.ts "<secid>"`
+- `npx tsx typescript/src/secid-cli.ts "<secid>"`
 - `cd go && go run ./cmd/secid "<secid>"`
 
 ## Coding Style & Naming Conventions

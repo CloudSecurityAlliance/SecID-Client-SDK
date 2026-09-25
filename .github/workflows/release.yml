@@ -1,0 +1,117 @@
+name: Release
+
+# Publishes the Python and TypeScript packages when a maintainer pushes a
+# release tag by hand. Nothing else triggers it — not pushes to main, not PRs.
+#
+#   python/vX.Y.Z      -> PyPI  cloudsecurityalliance-secid  (trusted publishing, OIDC)
+#   typescript/vX.Y.Z  -> npm   @cloudsecurityalliance/secid (token + provenance)
+#   go/vX.Y.Z          -> nothing to do here; the tag itself is the Go release
+#
+# INERT UNTIL CONFIGURED. Each publish job is skipped unless its repository
+# variable is set to "true" (Settings -> Secrets and variables -> Actions ->
+# Variables), so pushing a tag before the registries are set up does nothing:
+#   PYPI_PUBLISH_ENABLED  — after adding the PyPI trusted publisher
+#   NPM_PUBLISH_ENABLED   — after adding the NPM_TOKEN secret
+# Full setup steps: PUBLISHING.md, "Automated publishing".
+#
+# Actions are pinned by commit SHA (tag in the trailing comment).
+
+on:
+  push:
+    tags:
+      - "python/v*"
+      - "typescript/v*"
+
+permissions: {}
+
+jobs:
+  python-build:
+    name: Build Python distribution
+    if: startsWith(github.ref_name, 'python/v') && vars.PYPI_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - name: Check the tag matches __version__
+        run: |
+          tag="${GITHUB_REF_NAME#python/v}"
+          code="$(python -c 'import secid_client; print(secid_client.__version__)')"
+          if [ "$tag" != "$code" ]; then
+            echo "::error::Tag says $tag but secid_client.__version__ is $code"
+            exit 1
+          fi
+      - name: Test
+        run: pip install pytest && pytest test_secid_client.py -q
+      - name: Build and check
+        run: |
+          pip install build twine
+          python -m build
+          twine check --strict dist/*
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: python-dist
+          path: python/dist/
+          if-no-files-found: error
+
+  python-publish:
+    name: Publish to PyPI
+    needs: python-build
+    runs-on: ubuntu-latest
+    # The PyPI trusted publisher must name this environment. Add required
+    # reviewers to it in Settings -> Environments for a manual approval gate.
+    environment:
+      name: pypi
+      url: https://pypi.org/project/cloudsecurityalliance-secid/
+    permissions:
+      id-token: write # OIDC token for PyPI trusted publishing; no API token stored
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: python-dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+  npm-publish:
+    name: Publish to npm
+    if: startsWith(github.ref_name, 'typescript/v') && vars.NPM_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@cloudsecurityalliance/secid
+    permissions:
+      contents: read
+      id-token: write # required for npm --provenance
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: Check the tag matches package.json
+        run: |
+          tag="${GITHUB_REF_NAME#typescript/v}"
+          pkg="$(node -p 'require("./package.json").version')"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::Tag says $tag but package.json version is $pkg"
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm test # also asserts VERSION in secid-client.ts == package.json
+      - name: Publish with provenance
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

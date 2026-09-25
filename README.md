@@ -1,8 +1,8 @@
 # SecID-Client-SDK
 
-**This is not a traditional SDK.** There is no package to install.
+**This is not a traditional SDK.** You do not need a package to use SecID.
 
-SecID's API is one endpoint, one query parameter, JSON back. The entire client is ~30 lines in any language. The complexity isn't in calling the API — it's in knowing what to do with the results (weights, statuses, version disambiguation). That's better expressed as guidance than as code.
+A SecID client needs one endpoint, one query parameter, JSON back. The entire client is ~30 lines in any language. The complexity isn't in calling the API — it's in knowing what to do with the results (weights, statuses, version disambiguation). That's better expressed as guidance than as code.
 
 The primary artifact here is **instructions that AI assistants follow to build clients**, plus reference implementations you can copy.
 
@@ -10,7 +10,31 @@ The primary artifact here is **instructions that AI assistants follow to build c
 
 ## Four Paths to Use SecID
 
-### Path 1: Install from Package Registry
+### Path 1: Install a Package
+
+> **Not on PyPI or npm yet.** The packages are named `cloudsecurityalliance-secid`
+> (PyPI) and `@cloudsecurityalliance/secid` (npm), but neither has been published,
+> so `pip install cloudsecurityalliance-secid` and
+> `npm install @cloudsecurityalliance/secid` fail today. Until they are, install
+> from this repository:
+
+```bash
+# Python 3.9+ — pip installs straight from the python/ subdirectory
+pip install "git+https://github.com/CloudSecurityAlliance/SecID-Client-SDK#subdirectory=python"
+
+# Node 18+ — npm cannot install from a subdirectory of a git repo, so build a tarball
+git clone https://github.com/CloudSecurityAlliance/SecID-Client-SDK
+(cd SecID-Client-SDK/typescript && npm ci && npm pack)   # writes cloudsecurityalliance-secid-1.0.0.tgz
+npm install ./SecID-Client-SDK/typescript/cloudsecurityalliance-secid-1.0.0.tgz
+
+# Go 1.21+ — Go fetches modules from GitHub directly; no registry involved
+go get github.com/CloudSecurityAlliance/SecID-Client-SDK/go@latest
+go install github.com/CloudSecurityAlliance/SecID-Client-SDK/go/cmd/secid@latest
+```
+
+Or skip installing entirely: each client is a single file (Path 4).
+
+Once published, the registry commands will be:
 
 ```bash
 pip install cloudsecurityalliance-secid      # Python 3.9+
@@ -20,18 +44,29 @@ npm install @cloudsecurityalliance/secid     # Node 18+
 Then use as library or CLI:
 
 ```bash
-# CLI
+# CLI (installed by pip, npm, or go install)
 secid "secid:advisory/mitre.org/cve#CVE-2021-44228"
+```
 
+```python
 # Python
 from secid_client import SecIDClient
 client = SecIDClient()
 url = client.best_url("secid:advisory/mitre.org/cve#CVE-2021-44228")
+```
 
-# TypeScript
+```typescript
+// TypeScript
 import { SecIDClient } from "@cloudsecurityalliance/secid";
 const client = new SecIDClient();
 const url = await client.bestUrl("secid:advisory/mitre.org/cve#CVE-2021-44228");
+```
+
+```go
+// Go
+import secid "github.com/CloudSecurityAlliance/SecID-Client-SDK/go"
+resp, err := secid.NewClient("").Resolve("secid:advisory/mitre.org/cve#CVE-2021-44228")
+url := resp.BestURL()
 ```
 
 > **Package naming (CSA convention).** Where the registry provides a namespace
@@ -72,14 +107,14 @@ Single file. Zero dependencies. Copy and go.
 | Language | File | Runtime |
 |----------|------|---------|
 | Python | [`python/secid_client.py`](python/secid_client.py) | Python 3.9+ (stdlib only) |
-| TypeScript | [`typescript/secid-client.ts`](typescript/secid-client.ts) | Node 18+ / Deno / Bun (fetch only) |
+| TypeScript | [`typescript/src/secid-client.ts`](typescript/src/secid-client.ts) (CLI: [`typescript/src/secid-cli.ts`](typescript/src/secid-cli.ts)) | Node 18+ / Deno / Bun (fetch only) |
 | Go | [`go/secid.go`](go/secid.go) (CLI: [`go/cmd/secid`](go/cmd/secid/main.go)) | Go 1.21+ (stdlib only) |
 
 All include CLI mode:
 
 ```bash
 python python/secid_client.py "secid:advisory/mitre.org/cve#CVE-2021-44228"
-npx tsx typescript/secid-client.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"
+npx tsx typescript/src/secid-cli.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"
 (cd go && go run ./cmd/secid "secid:advisory/mitre.org/cve#CVE-2021-44228")
 ```
 
@@ -110,20 +145,23 @@ SecID-Client-SDK/
 │       ├── API-CONTRACT.md        # Formal API spec (request, response, encoding)
 │       ├── RESULT-HANDLING.md     # Statuses, weights, cross-source, versions
 │       └── PROMPT-TEMPLATE.md     # Copy-paste prompt for any language
-├── python/                        # pip install cloudsecurityalliance-secid
+├── python/                        # PyPI: cloudsecurityalliance-secid (not yet published)
 │   ├── secid_client.py            # Python client — stdlib only
 │   ├── pyproject.toml             # Package config (hatchling)
 │   └── README.md                  # PyPI page
-├── typescript/                    # npm install @cloudsecurityalliance/secid
+├── typescript/                    # npm: @cloudsecurityalliance/secid (not yet published)
 │   ├── src/
 │   │   ├── secid-client.ts        # Library exports
 │   │   └── secid-cli.ts           # CLI entry point
 │   ├── package.json               # Package config (ESM, Node 18+)
 │   ├── tsconfig.json              # TypeScript compiler config
 │   └── README.md                  # npm page
-└── go/
-    ├── secid.go                   # Go client (package secid) — stdlib only
-    └── cmd/secid/main.go          # Go CLI
+├── go/                            # module github.com/CloudSecurityAlliance/SecID-Client-SDK/go
+│   ├── secid.go                   # Go client (package secid) — stdlib only
+│   └── cmd/secid/main.go          # Go CLI
+└── tests/
+    ├── fixtures.json              # Shared client fixtures (all three languages)
+    └── conformance/               # Resolver conformance suite
 ```
 
 ## Quick Start
@@ -136,7 +174,7 @@ curl "https://secid.cloudsecurityalliance.org/api/v1/resolve?secid=secid:advisor
 python python/secid_client.py "secid:advisory/mitre.org/cve#CVE-2021-44228"
 
 # TypeScript
-npx tsx typescript/secid-client.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"
+npx tsx typescript/src/secid-cli.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"
 
 # Go
 (cd go && go run ./cmd/secid "secid:advisory/mitre.org/cve#CVE-2021-44228")
