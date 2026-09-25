@@ -87,15 +87,17 @@ class SecIDResponse:
     message: string | null
 
     property best_url → string | null
-        # Highest-weight URL from resolution results, or null.
-        # Validate the URL's scheme first (http/https only) — the resolver
-        # response is untrusted; reject javascript:/data:/file:/relative.
+        # Highest-weight valid URL from resolution results, or null.
+        # The resolver response is untrusted: only absolute http/https URLs
+        # with a host count (reject javascript:/data:/file:/relative). If the
+        # top URL fails, return the next valid one, not null.
 
     property was_corrected → bool
         # True if status is "corrected"
 
     property resolution_results → list
-        # Only results that have weight + url, sorted by weight descending
+        # Only results with a numeric weight and a valid http(s) url,
+        # sorted by weight descending
 
     property registry_results → list
         # Only results that have data
@@ -130,4 +132,4 @@ not_found: No namespace 'totallyinvented.com' in the advisory registry.
 10. Include docstrings explaining the encoding gotcha and status values
 11. **Set a 30-second request timeout** — prevents hanging on unresponsive servers
 12. **Limit response body to 10 MB** — read at most 10 MB and reject anything larger. Normal responses are 1–5 KB; this protects against memory exhaustion when the client is pointed at a custom base URL
-13. **Treat the resolver response as untrusted.** Validate any returned `url`'s scheme in `best_url` (allow `https`/`http` only; reject `javascript:`/`data:`/`file:`/relative). Strip control characters (C0/C1, incl. ESC `0x1B`) from server-controlled strings (`url`, `message`, corrected SecID) before printing them to a terminal — prevents ANSI-escape injection
+13. **Treat the resolver response as untrusted.** Validate every returned `url` (absolute `https`/`http` with a non-empty host only; reject `javascript:`/`data:`/`file:`/relative) and skip invalid ones in `best_url` and `resolution_results`. A `null` or array body, non-object results, or a non-numeric weight must produce an error or be ignored, never a crash. Strip control characters (C0/C1, incl. ESC `0x1B`) from server-controlled strings (`url`, `message`, corrected SecID) before printing them to a terminal — prevents ANSI-escape injection

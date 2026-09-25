@@ -80,14 +80,14 @@ cd go && go test -v ./...
 | Field | Type | Description |
 |-------|------|-------------|
 | `status` | string | Response status (found, corrected, related, not_found, error) |
-| `best_url` | string\|null | Highest-weight URL, or null if none |
+| `best_url` | string\|null | Highest-weight valid (absolute http/https) URL, or null if none |
 | `was_corrected` | boolean | Whether status == "corrected" |
-| `resolution_result_count` | integer | Count of results with weight + url |
+| `resolution_result_count` | integer | Count of results with a numeric weight and a valid http(s) url |
 | `registry_result_count` | integer | Count of results with data |
 | `message` | string\|null | Guidance message, or null |
 | `raises_error` | boolean | Client should return error (exception or status="error") |
 | `error_contains` | string | Substring that should appear in error message |
-| `request_url_contains` | string | Substring that should appear in the HTTP request URL |
+| `request_url_contains` | string | Substring that should appear in the HTTP request URL (the `encoding_*` fixtures use the full encoded query, so encodings must match byte for byte) |
 | `request_url_not_contains` | string | Substring that should NOT appear in the HTTP request URL |
 
 ## Adding a Test Case
@@ -105,9 +105,9 @@ cd go && go test -v ./...
 | `related` | Partial match / version required | Registry results, no resolution results |
 | `not_found` | Unknown namespace/type | Empty results, guidance message |
 | `error` | Empty/malformed input | Error status, guidance message |
-| `encoding` | Hash, colon, dot in identifiers | %23 encoding, character preservation |
-| `client_error` | Timeout, oversized, invalid JSON, 500 | Graceful error handling |
-| `edge_case` | Empty results, registry-only, mixed | Client doesn't crash on unusual shapes |
+| `encoding` | `#`, `&`, `+`, space, `%`, `@`, `!'()*`, non-ASCII, colon, dot | Identical percent-encoding across languages, character preservation |
+| `client_error` | Timeout, oversized, invalid JSON, `null`/`[]`/`{}` body, 500 | Graceful error handling |
+| `edge_case` | Empty results, registry-only, mixed, hostile URLs, mixed weight types, non-array results | Client doesn't crash on unusual shapes; best_url skips invalid URLs |
 
 ## Cross-Language Error Handling
 

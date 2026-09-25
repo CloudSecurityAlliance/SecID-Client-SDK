@@ -28,7 +28,7 @@ Run from repo root unless noted.
 - Add behavior through `tests/fixtures.json` first; keep language harnesses in sync with fixture schema.
 - Keep fixture names stable and descriptive.
 - Run Python, TypeScript, and Go suites before opening PRs.
-- Include URL-encoding cases (`#` -> `%23`) and error-path cases in fixtures for protocol changes.
+- Include URL-encoding cases (`#` -> `%23`) and error-path cases in fixtures for protocol changes. The `encoding_*` fixtures assert the whole encoded query, so all three clients must encode identically (space -> `%20`, `&` -> `%26`, `+` -> `%2B`, `%` -> `%25`, `@` -> `%40`).
 
 ## Commit & Pull Request Guidelines
 - Prefer small commits scoped to one concern (fixtures, Python, TypeScript, or Go).

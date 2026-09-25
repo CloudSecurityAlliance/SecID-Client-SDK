@@ -24,7 +24,7 @@ CORRECT: /api/v1/resolve?secid=secid:advisory/mitre.org/cve%23CVE-2021-44228
 WRONG:   /api/v1/resolve?secid=secid:advisory/mitre.org/cve#CVE-2021-44228
 ```
 
-The reference clients encode the *entire* SecID (`quote(safe="")` / `encodeURIComponent` / `url.QueryEscape`), not just `#`. That is deliberate — SPEC.md §8.4 lists many other characters (`@`, `?`, `&`, `%`, space, shell metacharacters) that appear in real identifiers and must survive transport. Don't "optimize" this into a `#`-only replacement.
+The reference clients encode the *entire* SecID (`quote(safe="")` / `encodeURIComponent` plus `!'()*` / `url.QueryEscape` with `+`→`%20`), not just `#`, and produce byte-identical output — the `encoding_*` fixtures assert the full encoded query. That is deliberate — SPEC.md §8.4 lists many other characters (`@`, `?`, `&`, `%`, space, shell metacharacters) that appear in real identifiers and must survive transport. Don't "optimize" this into a `#`-only replacement.
 
 ## API Summary
 
@@ -89,12 +89,12 @@ Two independent fixture suites with different subjects:
 
 | Suite | Fixtures | Tests | Harness |
 |-------|----------|-------|---------|
-| `tests/fixtures.json` | 21 | **Client** behavior against a per-language mock HTTP server | Python, TypeScript, Go |
+| `tests/fixtures.json` | 35 | **Client** behavior against a per-language mock HTTP server | Python, TypeScript, Go |
 | `tests/conformance/fixtures.json` | 10 | **Resolver** behavior against a live or local API | `tests/conformance-harness/python/run.py` (Python only) |
 
 The client suite is the main guard against language drift: all three harnesses read the same JSON and assert the same outcomes, so changing one client's behavior fails its siblings' builds until they follow. **Add behavior to `tests/fixtures.json` first, then make each language pass** — a new fixture needs no harness edits.
 
-Each language also has ~3 hand-written tests for hardening the fixture format can't express (URL-scheme allowlist, control-character stripping). Fixture count 21 + 3 hand-written = 24 tests per language.
+Each language also has hand-written tests for hardening the fixture format can't express: URL allowlist, control-character stripping, and hostile bodies served by a raw mock server (mid-body timeouts, non-UTF-8 bytes, unusable base URLs). Counts differ by language; run the suite rather than trusting a number here.
 
 CI (`.github/workflows/test.yml`) runs the client suite only, across Python 3.9–3.13, Node 20/22, Go 1.22/1.23. The conformance suite is manual despite what `tests/conformance/README.md` claims.
 
@@ -102,7 +102,7 @@ CI (`.github/workflows/test.yml`) runs the client suite only, across Python 3.9�
 
 Every client — reference or AI-generated — must preserve these, and the hand-written tests enforce them:
 
-- **URL scheme allowlist** — only `http`/`https` from resolver responses. `best_url` drops `javascript:`, `data:`, `file:` and relative URLs; a hostile resolver can return any of them as the highest-weight result.
+- **URL allowlist** — only absolute `http`/`https` URLs with a host, checked by the same hand-written rule in all three languages (not a URL parser; parsers disagree). `resolution_results` drops `javascript:`, `data:`, `file:` and relative URLs, and `best_url` returns the highest-weight *valid* URL, so a hostile top result falls through to the next valid one.
 - **10 MB response cap** (`MAX_RESPONSE_BYTES`) — oversized bodies become an error, not an OOM. Matters because `base_url` is user-settable.
 - **Terminal sanitization** — strip C0/C1 control characters from server-controlled strings (`url`, `message`, corrected SecID) before printing, or a crafted response injects ANSI escapes.
 - **Errors don't crash** — Python and TypeScript return `status="error"`; Go returns `(nil, error)` for transport/parse failures and `(*Response, nil)` with `Status="error"` for server-reported ones. This asymmetry is intentional (idiomatic per language) and the harnesses accept either.

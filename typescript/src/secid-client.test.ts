@@ -381,3 +381,11 @@ describe("hostile resolver responses", () => {
     assert.equal(r.bestUrl, undefined);
   });
 });
+
+describe("SecID encoding", () => {
+  it("returns an error for an unpaired surrogate instead of throwing", async () => {
+    const resp = await new SecIDClient("http://127.0.0.1:1", 2000).resolve("secid:x/y/\uD800");
+    assert.equal(resp.status, "error");
+    assert.match(resp.message ?? "", /Unicode/);
+  });
+});

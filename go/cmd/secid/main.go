@@ -30,6 +30,15 @@ func sanitizeTerminal(s string) string {
 	}, s)
 }
 
+// printJSON pretty-prints v without Go's default HTML escaping, so "&" in a
+// SecID prints as "&" (not "\u0026"), matching the Python and TypeScript CLIs.
+func printJSON(v interface{}) {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(v)
+}
+
 func main() {
 	if len(os.Args) < 2 || os.Args[1] == "-h" || os.Args[1] == "--help" {
 		fmt.Println("Usage: secid [--json] <secid>")
@@ -63,8 +72,7 @@ func main() {
 	}
 
 	if jsonMode {
-		out, _ := json.MarshalIndent(resp, "", "  ")
-		fmt.Println(string(out))
+		printJSON(resp)
 		return
 	}
 
@@ -78,14 +86,12 @@ func main() {
 			fmt.Println(sanitizeTerminal(url))
 		} else {
 			for _, r := range resp.RegistryResults() {
-				out, _ := json.MarshalIndent(r, "", "  ")
-				fmt.Println(string(out))
+				printJSON(r)
 			}
 		}
 	case "related":
 		for _, r := range resp.Results {
-			out, _ := json.MarshalIndent(r, "", "  ")
-			fmt.Println(string(out))
+			printJSON(r)
 		}
 	default:
 		msg := resp.Message
