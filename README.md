@@ -73,14 +73,14 @@ Single file. Zero dependencies. Copy and go.
 |----------|------|---------|
 | Python | [`python/secid_client.py`](python/secid_client.py) | Python 3.9+ (stdlib only) |
 | TypeScript | [`typescript/secid-client.ts`](typescript/secid-client.ts) | Node 18+ / Deno / Bun (fetch only) |
-| Go | [`go/secid.go`](go/secid.go) | Go 1.21+ (stdlib only) |
+| Go | [`go/secid.go`](go/secid.go) (CLI: [`go/cmd/secid`](go/cmd/secid/main.go)) | Go 1.21+ (stdlib only) |
 
 All include CLI mode:
 
 ```bash
 python python/secid_client.py "secid:advisory/mitre.org/cve#CVE-2021-44228"
 npx tsx typescript/secid-client.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"
-go run go/secid.go "secid:advisory/mitre.org/cve#CVE-2021-44228"
+(cd go && go run ./cmd/secid "secid:advisory/mitre.org/cve#CVE-2021-44228")
 ```
 
 ## Why This Approach
@@ -122,7 +122,8 @@ SecID-Client-SDK/
 │   ├── tsconfig.json              # TypeScript compiler config
 │   └── README.md                  # npm page
 └── go/
-    └── secid.go                   # Go client — stdlib only
+    ├── secid.go                   # Go client (package secid) — stdlib only
+    └── cmd/secid/main.go          # Go CLI
 ```
 
 ## Quick Start
@@ -138,7 +139,7 @@ python python/secid_client.py "secid:advisory/mitre.org/cve#CVE-2021-44228"
 npx tsx typescript/secid-client.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"
 
 # Go
-go run go/secid.go "secid:advisory/mitre.org/cve#CVE-2021-44228"
+(cd go && go run ./cmd/secid "secid:advisory/mitre.org/cve#CVE-2021-44228")
 ```
 
 ## Related Repositories

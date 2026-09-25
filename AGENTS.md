@@ -5,17 +5,17 @@
 - `tests/fixtures.json`: shared cross-language test fixture source.
 - `python/`: packaged Python client (`secid_client.py`) and tests.
 - `typescript/`: npm package sources (`src/`), CLI entry, and compiled output target (`dist/`).
-- `go/`: single-file Go client and tests.
+- `go/`: single-file Go library (`package secid`), CLI in `go/cmd/secid/`, and tests.
 
 ## Build, Test, and Development Commands
 Run from repo root unless noted.
 
 - `cd python && pip install -e . && python -m pytest test_secid_client.py -v`: Python fixture tests.
 - `cd typescript && npm ci && npm test`: TypeScript compile + Node test run.
-- `cd go && go test -v`: Go fixture tests.
+- `cd go && go test -v ./...`: Go fixture tests.
 - `python python/secid_client.py "<secid>"`
 - `npx tsx typescript/src/secid-client.ts "<secid>"`
-- `go run go/secid.go "<secid>"`
+- `cd go && go run ./cmd/secid "<secid>"`
 
 ## Coding Style & Naming Conventions
 - Preserve the zero-runtime-dependency client design per language.

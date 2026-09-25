@@ -49,7 +49,7 @@ Run a client:
 ```bash
 python python/secid_client.py "secid:advisory/mitre.org/cve#CVE-2021-44228"
 npx tsx typescript/src/secid-client.ts "secid:advisory/mitre.org/cve#CVE-2021-44228"
-go run go/secid.go "secid:advisory/mitre.org/cve#CVE-2021-44228"   # go.mod lives in go/, but this works from root
+(cd go && go run ./cmd/secid "secid:advisory/mitre.org/cve#CVE-2021-44228")   # library is package secid; CLI is go/cmd/secid
 ```
 
 Run the test suites (all three should be green before a PR):
