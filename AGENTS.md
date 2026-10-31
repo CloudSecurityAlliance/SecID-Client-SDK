@@ -49,6 +49,7 @@ Clients must tolerate unknown fields. The server adds them ahead of the SDK — 
 | `python/` | Packaged Python reference client (`secid_client.py`, stdlib only) and tests | When API changes |
 | `typescript/` | TypeScript reference client (`src/`, fetch only), CLI entry, and compiled output target (`dist/`) | When API changes |
 | `go/` | Single-file Go reference client (`package secid`, stdlib only), CLI in `go/cmd/secid/`, and tests | When API changes |
+| `BUSINESS-CASE.md`, `GOALS.md` | Component business case, AI enablement, goals, and success metrics | When product strategy changes |
 
 ## Build, Test, and Development Commands
 
