@@ -180,10 +180,13 @@ npx tsx typescript/src/secid-cli.ts "secid:advisory/mitre.org/cve#CVE-2021-44228
 (cd go && go run ./cmd/secid "secid:advisory/mitre.org/cve#CVE-2021-44228")
 ```
 
-## Related Repositories
+## Related Repositories & Documentation
 
-| Repo | Purpose |
+| Document / Repo | Purpose |
 |------|---------|
+| [`BUSINESS-CASE.md`](BUSINESS-CASE.md) | Business case, stakeholder value, AI enablement, and risk assessment |
+| [`GOALS.md`](GOALS.md) | Vision, objectives, and measurable success metrics |
+| [`PUBLISHING.md`](PUBLISHING.md) | PyPI and npm release workflow and credential setup |
 | [SecID](https://github.com/CloudSecurityAlliance/SecID) | Specification + registry data |
 | [SecID-Service](https://github.com/CloudSecurityAlliance/SecID-Service) | Cloudflare Worker REST API + MCP server |
 | **SecID-Client-SDK** (this repo) | Instructions + reference clients |
