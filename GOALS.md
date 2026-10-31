@@ -14,7 +14,7 @@ Make consuming SecID effortless and safe in any programming language or AI workf
     - 100% pass rate on the resolver conformance suite (`tests/conformance/fixtures.json`) against production `secid.cloudsecurityalliance.org` and `SecID-Server-API`.
 - **Objective:** Provide automated, reproducible package publishing for Python (`cloudsecurityalliance-secid` on PyPI), TypeScript (`@cloudsecurityalliance/secid` on npm), and Go (`github.com/CloudSecurityAlliance/SecID-Client-SDK/go`).
   - **Success metrics:**
-    - Tag-driven release workflow (`.github/workflows/release.yml`, [`PUBLISHING.md`](PUBLISHING.md)) passes pre-publish test gates and publishes cleanly for every `python/v*`, `typescript/v*`, and `go/v*` release tag.
+    - Tag-driven release workflow (`.github/workflows/release.yml`, [`PUBLISHING.md`](PUBLISHING.md)) passes pre-publish test gates and publishes cleanly for every `python/v*` (PyPI, when `PYPI_PUBLISH_ENABLED=true`) and `typescript/v*` (npm, when `NPM_PUBLISH_ENABLED=true`) release tag, and every `go/v*` tag passes CI (`.github/workflows/test.yml`) for direct Go module proxy consumption.
 
 ## Community & Ecosystem Goals
 
@@ -22,14 +22,14 @@ Make consuming SecID effortless and safe in any programming language or AI workf
   - **Success metrics:**
     - 0 third-party runtime dependencies across `python/secid_client.py`, `typescript/src/secid-client.ts`, and `go/secid.go`.
     - 100% parity between `skills/build-a-client/` documentation (`BUILD-A-CLIENT.md`, `API-CONTRACT.md`, `RESULT-HANDLING.md`, `PROMPT-TEMPLATE.md`) and the live `/api/v1/resolve` response contract.
-- **Objective:** Enforce defense-in-depth client safety invariants against untrusted or self-hosted server responses.
+- **Objective:** Enforce defense-in-depth client safety invariants and encoding fidelity against untrusted or self-hosted server responses.
   - **Success metrics:**
-    - 100% enforcement of the four client invariants across all reference clients and prompt templates: (1) byte-identical full SecID percent-encoding (`#` → `%23`, etc.), (2) `http`/`https` URL allowlist on `resolution_results` and `best_url`, (3) 10 MB `MAX_RESPONSE_BYTES` response cap, and (4) C0/C1 control-character stripping before terminal output.
+    - 100% enforcement of all four `AGENTS.md` client safety invariants plus encoding fidelity across all reference clients and prompt templates: (1) `http`/`https` URL allowlist on `resolution_results` and `best_url`, (2) 10 MB `MAX_RESPONSE_BYTES` response cap, (3) C0/C1 control-character stripping before terminal output, and (4) graceful error handling ("Errors don't crash": Python/TypeScript return `status="error"`, and Go returns `(nil, error)` for transport/parse failures or `Status="error"` for server-reported errors), alongside byte-identical full SecID percent-encoding (`#` → `%23`, etc.).
 
 ## Shared Goals
 
 - **Objective:** Prevent behavioral drift between SecID specifications, servers, and clients through fixture-first development.
-  - **Success metrics:** Every protocol or status-handling change lands in `tests/fixtures.json` or `tests/conformance/fixtures.json` first and passes identically across Python, TypeScript, and Go.
+  - **Success metrics:** Every client protocol, encoding, or status-handling change lands in `tests/fixtures.json` first and passes identically across Python, TypeScript, and Go, and every server/resolver conformance change lands in `tests/conformance/fixtures.json` (verified via `tests/conformance-harness/python/run.py`).
 
 ## Notes
 

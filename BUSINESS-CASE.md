@@ -2,7 +2,7 @@
 
 ## Executive summary
 
-`SecID-Client-SDK` provides AI-consumable client-building instructions (`skills/build-a-client/`), zero-dependency single-file reference clients in Python (`python/secid_client.py`), TypeScript (`typescript/src/secid-client.ts`), and Go (`go/secid.go`), and the shared cross-language client fixture suite (`tests/fixtures.json`) and resolver conformance harness (`tests/conformance/`). Instead of forcing developers to audit heavyweight third-party packages, `SecID-Client-SDK` makes integrating SecID trivial across any language — whether by copying a ~150-line stdlib-only file, installing a lightweight package (`cloudsecurityalliance-secid`, `@cloudsecurityalliance/secid`, `github.com/CloudSecurityAlliance/SecID-Client-SDK/go`), or handing `PROMPT-TEMPLATE.md` to an AI coding assistant.
+`SecID-Client-SDK` provides AI-consumable client-building instructions (`skills/build-a-client/`), zero-dependency single-file reference clients in Python (`python/secid_client.py`), TypeScript (`typescript/src/secid-client.ts`), and Go (`go/secid.go`), and the shared cross-language client fixture suite (`tests/fixtures.json`) and resolver conformance harness (`tests/conformance/fixtures.json` + `tests/conformance-harness/python/run.py`). Instead of forcing developers to audit heavyweight third-party packages, `SecID-Client-SDK` makes integrating SecID trivial across any language — whether by copying a ~320–335-line stdlib-only file, installing a lightweight package (`cloudsecurityalliance-secid`, `@cloudsecurityalliance/secid`, `github.com/CloudSecurityAlliance/SecID-Client-SDK/go`), or handing `PROMPT-TEMPLATE.md` to an AI coding assistant.
 
 ## Business benefit categories
 
@@ -22,7 +22,7 @@ Not directly applicable:
 
 ### Community Value Proposition
 - **Developers and security engineers** get four friction-free adoption paths: install a package, connect via MCP, generate a client in any language using `skills/build-a-client/PROMPT-TEMPLATE.md`, or copy a single stdlib-only reference file.
-- **Security-hardened client defaults:** Every reference client and AI prompt enforces strict client-side safety invariants against untrusted or self-hosted servers: an explicit `http`/`https` URL scheme allowlist (blocking `javascript:`, `data:`, `file:`), a 10 MB response size cap (`MAX_RESPONSE_BYTES`), and C0/C1 terminal control-character stripping to prevent ANSI escape injection.
+- **Security-hardened client defaults:** Every reference client and AI prompt enforces strict client-side safety invariants against untrusted or self-hosted servers: an explicit `http`/`https` URL scheme allowlist (blocking `javascript:`, `data:`, `file:`), a 10 MB response size cap (`MAX_RESPONSE_BYTES`), C0/C1 terminal control-character stripping to prevent ANSI escape injection, and graceful error handling that never crashes the caller (`status="error"` in Python/TypeScript; `(nil, error)` for transport/parse failures or `Status="error"` for server-reported errors in Go).
 
 ### Shared Value Creation
 - **Single source of truth for client behavior:** Updating `tests/fixtures.json` and `skills/build-a-client/` keeps human-written packages, copied single-file clients, and AI-generated clients in any language behavioral lockstep.
@@ -43,18 +43,18 @@ Not directly applicable:
 
 *(Note: `SecID-Client-SDK` is a library, prompt-skill, and test-suite repository with no hosted runtime infrastructure; `OPERATIONAL-RESOURCES.md` and `BACKUP-RESOURCES.md` are therefore not applicable.)*
 
-- **Technical operations:** GitHub Actions CI (`.github/workflows/test.yml` running Python 3.9–3.13, Node 18/20/22, Go 1.21–1.23, and live resolver conformance; `.github/workflows/release.yml` for tag-triggered PyPI/npm publishing). Zero runtime servers or cloud resources.
-- **Human / agent operations:** Governed autonomously by the SecID governing agent ([`CSA-Internal-Governance/SecID`](https://github.com/CSA-Internal-Governance/SecID)) with mandatory two-agent cross-vendor code review (`AGENTS.md`).
-- **Total ongoing FTE:** < 0.02 human FTE (stdlib-only clients have zero runtime third-party dependencies to patch).
+- **Technical operations:** GitHub Actions CI (`.github/workflows/test.yml` running Python 3.9–3.13, Node 18/20/22, Go 1.21–1.23, and live resolver conformance; `.github/workflows/release.yml` for tag-triggered PyPI/npm publishing, while Go modules are served directly from GitHub `go/v*` tags). Zero runtime servers or cloud resources.
+- **Human / agent & knowledge operations:** Governed autonomously by the SecID governing agent ([`CSA-Internal-Governance/SecID`](https://github.com/CSA-Internal-Governance/SecID)) with mandatory two-agent cross-vendor code review (`AGENTS.md`). Knowledge operations include maintaining the AI client-building instructions in `skills/build-a-client/` and keeping `SecID-Service`'s MCP resource copies (`secid://docs/build-a-client`, `secid://docs/prompt-template`) synchronized when the API contract evolves.
+- **Total ongoing FTE:** < 0.02 human FTE (initial engineering estimate based on stdlib-only clients with zero runtime third-party dependencies to patch and rare `/api/v1/resolve` contract changes; to be validated after 6 months of autonomous governance).
 - **Automation / minimization strategy:**
   - All three language test harnesses read `tests/fixtures.json` directly.
-  - Package publishing (`release.yml`) is gated by language tags (`python/v*`, `typescript/v*`) and repository variables (`PYPI_PUBLISH_ENABLED`, `NPM_PUBLISH_ENABLED`), documented in [`PUBLISHING.md`](PUBLISHING.md).
+  - PyPI and npm package publishing (`release.yml`) is gated by language tags (`python/v*`, `typescript/v*`) and repository variables (`PYPI_PUBLISH_ENABLED`, `NPM_PUBLISH_ENABLED`), and Go releases use `go/v*` tags directly via the Go module proxy, as documented in [`PUBLISHING.md`](PUBLISHING.md).
 - **Burden-exceeds-value / sunset trigger:** If a language reference client requires non-stdlib runtime dependencies or exceeds 2 hours/month of maintenance, simplify it back to a minimal single-file stdlib implementation.
 
 ### Risks and mitigations
 
 - **Cross-language behavioral or encoding drift →** Mitigated by `tests/fixtures.json` (including `encoding_*` fixtures that assert byte-identical percent-encoding across Python, TypeScript, and Go) run across all supported language versions on every PR.
-- **Malicious or compromised custom resolver (`base_url`) returning hostile payloads →** Mitigated by mandatory client invariants enforced across all three languages and `skills/build-a-client/`: `http`/`https` URL allowlist, 10 MB `MAX_RESPONSE_BYTES` cap, and C0/C1 control-character stripping.
+- **Malicious or compromised custom resolver (`base_url`) returning hostile payloads →** Mitigated by mandatory client invariants enforced across all three languages and `skills/build-a-client/`: `http`/`https` URL allowlist, 10 MB `MAX_RESPONSE_BYTES` cap, C0/C1 control-character stripping, and graceful error handling ("Errors don't crash").
 - **Supply-chain risk on published packages →** Mitigated by zero runtime dependencies, SHA-pinned GitHub Actions workflows, and explicit publish gates in `release.yml` ([`PUBLISHING.md`](PUBLISHING.md)).
 
 ## Success metrics
