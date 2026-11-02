@@ -90,6 +90,84 @@ jobs:
       - name: Run tests
         run: go test -v ./...
 
+  package-smoke:
+    name: Package build & version lockstep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.13"
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: "1.23"
+      - name: Check cross-language version lockstep
+        run: |
+          python - <<'PY'
+          import json, pathlib, re, sys
+          root = pathlib.Path(".")
+          py_ver = re.search(r'^__version__\s*=\s*"([^"]+)"', (root / "python/secid_client.py").read_text(), re.M).group(1)
+          ts_pkg = json.loads((root / "typescript/package.json").read_text())["version"]
+          ts_src = re.search(r'^export const VERSION\s*=\s*"([^"]+)"', (root / "typescript/src/secid-client.ts").read_text(), re.M).group(1)
+          go_ver = re.search(r'\bVersion\s*=\s*"([^"]+)"', (root / "go/secid.go").read_text()).group(1)
+          versions = {"python": py_ver, "typescript/package.json": ts_pkg, "typescript/secid-client.ts": ts_src, "go": go_ver}
+          print("Detected versions:", versions)
+          if len(set(versions.values())) != 1:
+              print("::error::SDK versions are out of lockstep:", versions, file=sys.stderr)
+              sys.exit(1)
+          PY
+      - name: Build, check, and smoke-install Python wheel
+        working-directory: python
+        run: |
+          pip install build twine
+          python -m build
+          twine check --strict dist/*
+          python -m venv /tmp/secid-wheel-smoke
+          /tmp/secid-wheel-smoke/bin/pip install dist/*.whl
+          /tmp/secid-wheel-smoke/bin/secid --help >/dev/null
+      - name: Build, pack, and smoke-test TypeScript package
+        working-directory: typescript
+        run: |
+          npm ci
+          npm run build
+          npm pack --dry-run
+          node dist/secid-cli.js --help >/dev/null
+      - name: Build and smoke-test Go CLI
+        working-directory: go
+        run: |
+          go build -o /tmp/secid-go ./cmd/secid
+          /tmp/secid-go --help >/dev/null
+
+  ci-passed:
+    name: ci-passed
+    if: always()
+    needs:
+      - python
+      - typescript
+      - go
+      - package-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all deterministic gates to succeed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Gate results: $RESULTS"
+          for r in $RESULTS; do
+            if [ "$r" != "success" ]; then
+              echo "::error::A required CI gate did not succeed ($r)."
+              exit 1
+            fi
+          done
+
   conformance:
     # Resolver conformance suite (tests/conformance/) against the LIVE public
     # resolver. It tests the server, not these clients, and depends on the
