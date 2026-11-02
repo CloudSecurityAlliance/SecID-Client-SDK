@@ -18,9 +18,9 @@ GET https://secid.cloudsecurityalliance.org/api/v1/resolve?secid={encoded_secid}
 ### Country Filter and Wildcards
 
 - **Country filter (two equivalent forms):**
-  1. **SecID qualifier (recommended for SDK clients):** Append `?country=XX` inside the SecID string before encoding (e.g., `secid:regulation?country=DE` or `secid:regulation/bsi.bund.de/it-grundschutz?country=DE`). Because the qualifier is part of the SecID string, `resolve(secid)` supports it with no extra method parameters.
+  1. **SecID wildcard + qualifier (recommended for SDK clients):** Append `/*?country=XX` inside the SecID string before encoding (e.g., `secid:regulation/*?country=DE` or `secid:control/*?country=JP`). Because the qualifier is part of the SecID string, `resolve(secid)` supports it with no extra method parameters.
   2. **HTTP query parameter:** Pass `&country=XX` on the request URL (`GET /api/v1/resolve?secid=secid%3Aregulation&country=DE`).
-  Both filter results to the specified ISO 3166-1 alpha-2 country code (`DE`, `US`, `JP`, etc., case-insensitive) and attach a top-level `filter` object (`{"country": "DE", "total_before_filter": <number>}`) to the response envelope.
+  Both filter namespace listings to the specified ISO 3166-1 alpha-2 country code (`DE`, `US`, `JP`, etc., case-insensitive) and attach a top-level `filter` object (`{"country": "DE", "total_before_filter": <number>}`) to the response envelope. (An equivalent `&subtype=<value>` parameter is also supported for subtype filtering.)
 - **Wildcard (`/*`):** Appending `/*` lists all child entries under a type or namespace — for example, `secid:control/*` lists all control namespaces and `secid:advisory/mitre.org/*` lists all advisory sources under `mitre.org`.
 
 ## Request
@@ -284,7 +284,7 @@ Ten types, matching `GET /api/v1/types`:
 | `secid:advisory/CVE-2021-44228` | Cross-source search (all advisory sources) |
 | `secid:advisory` | List all advisory namespaces |
 | `secid:control/*` | List all control namespaces (wildcard) |
-| `secid:regulation?country=DE` | List regulation namespaces filtered to Germany (`DE`) |
+| `secid:regulation/*?country=DE` | List regulation namespaces filtered to Germany (`DE`) |
 
 ## MCP Server Surface
 
@@ -300,17 +300,17 @@ https://secid.cloudsecurityalliance.org/mcp
 
 | Tool | Parameters | Description |
 |------|------------|-------------|
-| `resolve` | `secid` (string), `country?` (string) | Resolve a SecID string to URLs or registry browsing data (same contract as `GET /api/v1/resolve`). |
-| `lookup` | `type` (enum), `id` (string) | Cross-source search for an identifier across all namespaces of a type (equivalent to `resolve("secid:{type}/{id}")`). |
-| `describe` | `secid` (string) | Return full registry metadata (description, patterns, examples, children, notes, regulations) for a type, namespace, or source in a single call. |
-| `submit_feedback` | `secid_query` (string), `feedback_type` (`missing_source` \| `wrong_result` \| `broken_url` \| `pattern_gap` \| `general`), `description` (string), `suggested_correction?` (string), `source_url?` (string) | Submit structured feedback when a query returns `not_found`, a URL is broken, or a source is missing from the registry. |
+| `resolve` | `secid` (string) | Resolve a SecID string to URLs or registry browsing data (same contract as `GET /api/v1/resolve`). |
+| `lookup` | `type` (enum), `identifier` (string) | Cross-source search for an identifier across all namespaces of a type (equivalent to `resolve("secid:{type}/{identifier}")`). |
+| `describe` | `secid` (string) | Strip any `#subpath` and return registry metadata (`official_name`, `patterns`, `examples`, `urls`) for a type, namespace, or source; bare-type queries (`secid:<type>`) also include `subtypes`. |
+| `submit_feedback` | `category` (`missing-namespace` \| `correction` \| `suggestion`), `secid` (string), `message` (string), `suggested_urls?` (string[]) | Submit structured feedback when a query returns `not_found` for a source that should exist, existing data is wrong, or an improvement is suggested. |
 
 ### MCP Resources
 
 | Resource URI | Returns |
 |--------------|---------|
-| `secid://registry` | Top-level overview of all 10 SecID types (`text/markdown`) |
-| `secid://registry/{type}` | Namespace listing for a specific type, e.g. `secid://registry/advisory` (`text/markdown`) |
-| `secid://docs/build-a-client` | Complete guide for building a SecID HTTP client (`BUILD-A-CLIENT.md`) |
-| `secid://docs/prompt-template` | Copy-paste prompt template for generating a client in any language (`PROMPT-TEMPLATE.md`) |
-| `secid://docs/feedback` | Guide for submitting high-signal registry feedback via `submit_feedback` |
+| `secid://registry` | Top-level overview of all 10 SecID types and their namespace counts (`application/json`) |
+| `secid://registry/{type}` | Namespace listing for a specific type, e.g. `secid://registry/advisory` (`application/json`) |
+| `secid://docs/build-a-client` | Complete guide for building a SecID HTTP client (`text/markdown`, matches `BUILD-A-CLIENT.md`) |
+| `secid://docs/prompt-template` | Copy-paste prompt template for generating a client in any language (`text/markdown`, matches `PROMPT-TEMPLATE.md`) |
+| `secid://docs/feedback` | Guide for submitting registry feedback via `submit_feedback` (`text/markdown`) |

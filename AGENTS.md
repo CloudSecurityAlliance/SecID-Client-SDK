@@ -26,7 +26,7 @@ The reference clients encode the *entire* SecID (`quote(safe="")` / `encodeURICo
 
 ## API Summary
 
-Primary endpoint: `GET /api/v1/resolve?secid={encoded_secid}` (optional `&country=XX` query param or `?country=XX` SecID qualifier; `/*` wildcard lists children). Two more read-only endpoints exist and the clients do not use them: `GET /api/v1/types` (type catalog) and `GET /api/v1/registry.json` (full registry dump, ~4 MB).
+Primary endpoint: `GET /api/v1/resolve?secid={encoded_secid}` (optional `&country=XX` query param or `/*?country=XX` SecID qualifier; `/*` wildcard lists children). Two more read-only endpoints exist and the clients do not use them: `GET /api/v1/types` (type catalog) and `GET /api/v1/registry.json` (full registry dump, ~4 MB).
 
 Response envelope: `{secid_query, status, results[], message?, filter?, error_id?}`
 

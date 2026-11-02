@@ -263,7 +263,11 @@ def test_fixture(fixture, mock_server):
 def test_connection_refused(fixture):
     # Point client at a port where nothing is listening
     client = SecIDClient(base_url="http://127.0.0.1:1", timeout=2)
-    resp = client.resolve(fixture["input"]["secid"])
+    inp = fixture["input"]
+    if inp.get("method") == "best_url":
+        assert client.best_url(inp["secid"]) is None
+        return
+    resp = _invoke_response(client, inp)
     assert resp.status == "error"
 
 

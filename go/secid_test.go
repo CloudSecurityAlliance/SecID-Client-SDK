@@ -166,8 +166,8 @@ func TestFixtures(t *testing.T) {
 			if fixture.Input.Method == "best_url" {
 				u, err := client.BestURL(fixture.Input.SecID)
 				if fixture.Expected.RaisesError {
-					if err == nil && u != "" {
-						t.Errorf("Expected error or empty URL from BestURL, got %q", u)
+					if err == nil || u != "" {
+						t.Errorf("Expected non-nil error and empty URL from BestURL, got u=%q, err=%v", u, err)
 					}
 					return
 				}
@@ -243,6 +243,14 @@ func testConnectionRefused(t *testing.T, fixture Fixture) {
 	// Point at a port where nothing is listening
 	client := NewClient("http://127.0.0.1:1")
 	client.HTTPClient.Timeout = 2 * time.Second
+
+	if fixture.Input.Method == "best_url" {
+		u, err := client.BestURL(fixture.Input.SecID)
+		if err == nil || u != "" {
+			t.Errorf("Expected non-nil error and empty URL from BestURL on connection refused, got u=%q, err=%v", u, err)
+		}
+		return
+	}
 
 	resp, err := invokeResponse(t, client, fixture.Input)
 	if err != nil {

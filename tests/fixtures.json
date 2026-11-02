@@ -1379,16 +1379,16 @@
     },
     {
       "name": "found_unknown_envelope_and_result_fields",
-      "description": "Envelope with top-level filter and unknown keys plus result with lang and unknown keys is tolerated without error.",
+      "description": "Synthetic forward-compatibility fixture: envelope with top-level filter and unknown keys plus result with lang and unknown keys is tolerated without error.",
       "category": "edge_case",
       "input": {
-        "secid": "secid:regulation/bsi.bund.de/it-grundschutz?country=DE",
+        "secid": "secid:regulation/bsi.bund.de/it-grundschutz#GS-1",
         "method": "resolve"
       },
       "mock_response": {
         "http_status": 200,
         "body": {
-          "secid_query": "secid:regulation/bsi.bund.de/it-grundschutz?country=DE",
+          "secid_query": "secid:regulation/bsi.bund.de/it-grundschutz#GS-1",
           "status": "found",
           "filter": {
             "country": "DE",
@@ -1399,7 +1399,7 @@
           },
           "results": [
             {
-              "secid": "secid:regulation/bsi.bund.de/it-grundschutz",
+              "secid": "secid:regulation/bsi.bund.de/it-grundschutz#GS-1",
               "weight": 100,
               "url": "https://www.bsi.bund.de/DE/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/IT-Grundschutz/it-grundschutz_node.html",
               "lang": "de",
