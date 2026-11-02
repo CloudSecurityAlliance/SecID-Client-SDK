@@ -505,6 +505,40 @@
       }
     },
     {
+      "name": "client_network_error_best_url",
+      "description": "Connection refused when calling best_url() / bestUrl() / BestURL(). Returns null/undefined or error.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "best_url"
+      },
+      "mock_response": {
+        "behavior": "connection_refused"
+      },
+      "expected": {
+        "raises_error": true,
+        "best_url": null
+      }
+    },
+    {
+      "name": "client_network_error_lookup",
+      "description": "Connection refused when calling lookup(). Client returns error.",
+      "category": "client_error",
+      "input": {
+        "method": "lookup",
+        "args": {
+          "type": "advisory",
+          "identifier": "CVE-2021-44228"
+        }
+      },
+      "mock_response": {
+        "behavior": "connection_refused"
+      },
+      "expected": {
+        "raises_error": true
+      }
+    },
+    {
       "name": "empty_results_array",
       "description": "Server says 'found' but results=[] (shouldn't happen, but client shouldn't crash).",
       "category": "edge_case",

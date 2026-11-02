@@ -266,7 +266,7 @@ describe("SecID Client (connection refused)", () => {
       const client = new SecIDClient("http://127.0.0.1:1", 2000);
       if (fixture.input.method === "best_url") {
         const url = await client.bestUrl(fixture.input.secid ?? "");
-        assert.equal(url, null, "Expected null from bestUrl on connection refused");
+        assert.equal(url, undefined, "Expected undefined from bestUrl on connection refused");
         return;
       }
       const resp = await invokeResponse(client, fixture.input);

@@ -24,6 +24,7 @@ REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKILL_DIR = REPO_ROOT / "skills" / "build-a-client"
 BUILD_A_CLIENT_PATH = SKILL_DIR / "BUILD-A-CLIENT.md"
 PROMPT_TEMPLATE_PATH = SKILL_DIR / "PROMPT-TEMPLATE.md"
+MAX_RESPONSE_BYTES = 1_048_576  # 1 MiB cap for MCP HTTP responses
 
 
 def sha256_exact(text: str) -> str:
@@ -31,12 +32,66 @@ def sha256_exact(text: str) -> str:
 
 
 def extract_ts_template(ts_source: str, const_name: str) -> str:
-    pattern = rf"(?:export\s+)?const\s+{re.escape(const_name)}\s*=\s*`(.*?)`;\n"
-    match = re.search(pattern, ts_source, re.DOTALL)
-    if not match:
+    """Strictly parse a TypeScript template literal constant without executing code.
+
+    Permits only `\\\\`, `\\``, and `\\${` escape sequences (the only escapes
+    needed when embedding raw Markdown in a template literal) and rejects any
+    unescaped `${...}` interpolation or other JS escape sequence (`\\n`, `\\x`,
+    `\\u`, etc.) so local checks can never report a false match.
+    """
+    header_match = re.search(rf"(?:export\s+)?const\s+{re.escape(const_name)}\s*=\s*`", ts_source)
+    if not header_match:
         raise ValueError(f"Could not find template constant {const_name} in TypeScript source")
-    raw = match.group(1)
-    return raw.replace("\\`", "`").replace("\\${", "${").replace("\\\\", "\\")
+
+    i = header_match.end()
+    n = len(ts_source)
+    out: list[str] = []
+
+    while i < n:
+        ch = ts_source[i]
+        if ch == "`":
+            # End of template literal; verify statement terminator follows
+            rest = ts_source[i + 1 : i + 10].lstrip(" \t")
+            if not rest.startswith(";"):
+                raise ValueError(f"Template constant {const_name} closing backtick not followed by ';'")
+            return "".join(out)
+        if ch == "$" and i + 1 < n and ts_source[i + 1] == "{":
+            raise ValueError(f"Unescaped template interpolation ${{...}} in {const_name}")
+        if ch == "\\":
+            if i + 1 >= n:
+                raise ValueError(f"Trailing backslash at end of {const_name}")
+            nxt = ts_source[i + 1]
+            if nxt in ("\\", "`"):
+                out.append(nxt)
+                i += 2
+                continue
+            if nxt == "$" and i + 2 < n and ts_source[i + 2] == "{":
+                out.append("${")
+                i += 3
+                continue
+            raise ValueError(
+                f"Unsupported escape sequence \\{nxt!r} in {const_name} "
+                f"(escape backslashes as \\\\ so TypeScript preserves literal text)"
+            )
+        if ch == "\r":
+            # Per ECMA-262 §12.8.6, template literals normalize CR and CRLF to LF
+            out.append("\n")
+            if i + 1 < n and ts_source[i + 1] == "\n":
+                i += 2
+            else:
+                i += 1
+            continue
+        out.append(ch)
+        i += 1
+
+    raise ValueError(f"Unterminated template constant {const_name} in TypeScript source")
+
+
+def _read_bounded(resp: urllib.request.addinfourl, max_bytes: int = MAX_RESPONSE_BYTES) -> bytes:
+    data = resp.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise ValueError(f"MCP HTTP response exceeded {max_bytes} bytes")
+    return data
 
 
 def fetch_mcp_resource(mcp_url: str, uri: str, req_id: int) -> str:
@@ -59,7 +114,7 @@ def fetch_mcp_resource(mcp_url: str, uri: str, req_id: int) -> str:
     ).encode("utf-8")
     req = urllib.request.Request(mcp_url, data=init_payload, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=15) as resp:
-        _ = resp.read()
+        _ = _read_bounded(resp)
 
     read_payload = json.dumps(
         {
@@ -71,14 +126,18 @@ def fetch_mcp_resource(mcp_url: str, uri: str, req_id: int) -> str:
     ).encode("utf-8")
     req = urllib.request.Request(mcp_url, data=read_payload, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=15) as resp:
-        body = resp.read().decode("utf-8")
+        body = _read_bounded(resp).decode("utf-8")
 
-    # Handle either plain JSON or SSE `data: {...}`
+    # Handle either plain JSON or SSE `data: {...}` (matching by JSON-RPC id)
     data_obj = None
     for line in body.splitlines():
         if line.startswith("data: "):
-            data_obj = json.loads(line[len("data: ") :])
-            break
+            candidate = json.loads(line[len("data: ") :])
+            if isinstance(candidate, dict) and candidate.get("id") == req_id:
+                data_obj = candidate
+                break
+            if isinstance(candidate, dict) and "result" in candidate:
+                data_obj = candidate
     if data_obj is None:
         data_obj = json.loads(body)
 
