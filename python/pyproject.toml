@@ -3,9 +3,9 @@ requires = ["hatchling>=1.27"]  # PEP 639 license expression support
 build-backend = "hatchling.build"
 
 [project]
-# PyPI has a flat namespace, so the distribution name carries the org prefix.
+# PyPI has a flat namespace, so the distribution name carries the csa- prefix.
 # The import module (secid_client) and the CLI command (secid) stay simple.
-name = "cloudsecurityalliance-secid"
+name = "csa-secid"
 dynamic = ["version"]  # read from __version__ in secid_client.py
 description = "Resolve security identifiers to URLs using the SecID API"
 readme = "README.md"
