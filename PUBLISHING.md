@@ -81,7 +81,7 @@ Notes:
 - **Always clear `dist/` first.** A stale wheel from an earlier build (e.g. an
   old `secid-0.1.0`) left in `dist/` would get picked up by `twine upload dist/*`
   and either fail or upload the wrong artifact. Alternatively, upload the exact
-  files: `twine upload dist/csa_secid-1.0.0*`.
+  files: `twine upload dist/csa_secid-0.1.0*`.
 - The **wheel** ships only `secid_client.py` (no tests); the **sdist** is the
   full source archive (includes the test file, which is normal — `pip install`
   uses the wheel).
@@ -110,30 +110,30 @@ No registry upload. Consumers fetch the module straight from GitHub through the
 Go module proxy:
 
 ```bash
-go get github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v1.0.0
-go install github.com/CloudSecurityAlliance/SecID-Client-SDK/go/cmd/secid@v1.0.0
+go get github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v0.1.0
+go install github.com/CloudSecurityAlliance/SecID-Client-SDK/go/cmd/secid@v0.1.0
 ```
 
 **The module is in the `go/` subdirectory, so its tags must be prefixed with
 `go/`.** Go maps a module at `<repo>/go` to tags named `go/vX.Y.Z`. A plain
 `vX.Y.Z` tag on the repository root is ignored for this module — `go get
-…/go@v1.0.0` would fail to find it.
+…/go@v0.1.0` would fail to find it.
 
 ```bash
 git checkout main && git pull
 cd go && go test ./... && cd ..
-git tag -a go/v1.0.0 -m "Go client v1.0.0"
-git push origin go/v1.0.0
+git tag -a go/v0.1.0 -m "Go client v0.1.0"
+git push origin go/v0.1.0
 ```
 
 Verify the proxy has picked it up (may take a minute):
 
 ```bash
-GOPROXY=https://proxy.golang.org go list -m github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v1.0.0
+GOPROXY=https://proxy.golang.org go list -m github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v0.1.0
 ```
 
 Without any tag, `go get …/go@main` still works, but consumers get a
-pseudo-version (`v0.0.0-2026…-abcdef`) rather than `v1.0.0`.
+pseudo-version (`v0.0.0-2026…-abcdef`) rather than `v0.1.0`.
 
 Notes:
 - The library is `package secid` (importable); the CLI is `go/cmd/secid`
@@ -162,11 +162,11 @@ After bumping, re-run the dry-run / check steps above before each publish.
 
 **Current registry status** (updated 2026-11-02):
 
-- PyPI `csa-secid`: Trusted Publisher configured (`CloudSecurityAlliance/SecID-Client-SDK`, `release.yml`, environment `pypi`) and `PYPI_PUBLISH_ENABLED=true`.
+- PyPI `csa-secid`: Trusted Publisher configured (`CloudSecurityAlliance/SecID-Client-SDK`, `release.yml`, environment `pypi`) and `PYPI_PUBLISH_ENABLED=true` (`0.1.0` pre-1.0 series).
 - npm `@cloudsecurityalliance/secid`: not yet published.
-- Go: `github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v1.0.0` is live on `proxy.golang.org` (`go/v1.0.0` tag).
+- Go: `github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v0.1.0` (`go/v0.1.0` tag).
 
-All three are first releases at `1.0.0`, not renames, so there is nothing to
+All three start in the `0.Y.Z` series (`0.1.0`), not renames, so there is nothing to
 deprecate. Local checks: `python -m build` plus `twine check
 --strict` PASSED; the wheel holds only `secid_client.py` and installs a working
 `secid` CLI in a clean venv. `npm pack --dry-run` lists 7 files; a packed
@@ -240,9 +240,9 @@ secret.
 ```bash
 git checkout main && git pull
 # bump versions (see "Bumping versions"), merge that PR, pull again, then:
-git tag -a python/v1.0.0     -m "Python client v1.0.0"     && git push origin python/v1.0.0
-git tag -a typescript/v1.0.0 -m "TypeScript client v1.0.0" && git push origin typescript/v1.0.0
-git tag -a go/v1.0.0         -m "Go client v1.0.0"         && git push origin go/v1.0.0
+git tag -a python/v0.1.0     -m "Python client v0.1.0"     && git push origin python/v0.1.0
+git tag -a typescript/v0.1.0 -m "TypeScript client v0.1.0" && git push origin typescript/v0.1.0
+git tag -a go/v0.1.0         -m "Go client v0.1.0"         && git push origin go/v0.1.0
 ```
 
 Watch the run under Actions → Release, approve the environment gate if you set

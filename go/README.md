@@ -50,7 +50,7 @@ change the `package secid` line to your package name.
 ## Versions
 
 Because the module is in a subdirectory, its release tags carry the
-subdirectory prefix: `go/v1.0.0`, not `v1.0.0`. A bare `v1.0.0` tag on this
+subdirectory prefix: `go/v0.1.0`, not `v0.1.0`. A bare `v0.1.0` tag on this
 repository is invisible to `go get`. See [PUBLISHING.md](../PUBLISHING.md).
 
 ## Tests

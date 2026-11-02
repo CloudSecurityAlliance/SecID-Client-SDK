@@ -38,7 +38,7 @@ import (
 
 // Version is the client version. Keep it equal to the go/vX.Y.Z release tag;
 // the User-Agent is built from it.
-const Version = "1.0.0"
+const Version = "0.1.0"
 
 const DefaultBaseURL = "https://secid.cloudsecurityalliance.org"
 const DefaultTimeout = 30 * time.Second

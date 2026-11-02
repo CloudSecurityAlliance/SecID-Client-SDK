@@ -22,8 +22,8 @@ go install github.com/CloudSecurityAlliance/SecID-Client-SDK/go/cmd/secid@latest
 
 # Node 18+ — @cloudsecurityalliance/secid is not yet published on npm; build a tarball from this repo:
 git clone https://github.com/CloudSecurityAlliance/SecID-Client-SDK
-(cd SecID-Client-SDK/typescript && npm ci && npm pack)   # writes cloudsecurityalliance-secid-1.0.0.tgz
-npm install ./SecID-Client-SDK/typescript/cloudsecurityalliance-secid-1.0.0.tgz
+(cd SecID-Client-SDK/typescript && npm ci && npm pack)   # writes cloudsecurityalliance-secid-0.1.0.tgz
+npm install ./SecID-Client-SDK/typescript/cloudsecurityalliance-secid-0.1.0.tgz
 ```
 
 Or skip installing entirely: each client is a single file (Path 4).
