@@ -129,3 +129,15 @@ The three clients handle errors differently:
 - **Go** — `Resolve()` returns `(nil, error)` for network/parse failures, `(*Response, nil)` with `Status="error"` for server-reported errors
 
 For `raises_error` tests, each harness checks: **either** an exception/error occurred **or** the response has `status="error"`.
+
+## MCP Build-a-Client Doc Sync Check
+
+`check_mcp_docs_sync.py` verifies that the live or local `SecID-Service` MCP doc resources (`secid://docs/build-a-client` and `secid://docs/prompt-template`) match `skills/build-a-client/BUILD-A-CLIENT.md` and `skills/build-a-client/PROMPT-TEMPLATE.md`:
+
+```bash
+# Against local ../SecID-Service/src/mcp.ts
+python3 tests/check_mcp_docs_sync.py --local-mcp-ts ../SecID-Service/src/mcp.ts
+
+# Against live MCP endpoint
+python3 tests/check_mcp_docs_sync.py --target https://secid.cloudsecurityalliance.org
+```

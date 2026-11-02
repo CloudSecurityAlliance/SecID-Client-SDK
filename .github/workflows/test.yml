@@ -108,3 +108,5 @@ jobs:
           python-version: "3.13"
       - name: Run conformance suite against the live resolver
         run: python tests/conformance-harness/python/run.py --target https://secid.cloudsecurityalliance.org
+      - name: Check MCP build-a-client doc sync against the live resolver
+        run: python tests/check_mcp_docs_sync.py --target https://secid.cloudsecurityalliance.org
