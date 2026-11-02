@@ -22,7 +22,7 @@
  * Library version. Must equal "version" in package.json — a test enforces it.
  * Kept as a literal so this file still works when copied on its own.
  */
-export const VERSION = "1.0.0";
+export const VERSION = "0.1.0";
 
 const DEFAULT_BASE_URL = "https://secid.cloudsecurityalliance.org";
 const DEFAULT_TIMEOUT_MS = 30_000; // 30 seconds

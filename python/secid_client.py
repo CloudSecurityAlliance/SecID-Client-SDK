@@ -26,7 +26,7 @@ from __future__ import annotations
 
 # Single source of truth for the version: pyproject.toml reads it from here
 # (hatch dynamic version) and the User-Agent is built from it.
-__version__ = "1.0.0"
+__version__ = "0.1.0"
 
 import http.client
 import json
