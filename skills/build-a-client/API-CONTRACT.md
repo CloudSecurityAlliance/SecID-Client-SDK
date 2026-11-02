@@ -5,15 +5,23 @@ Formal specification of the SecID REST API. This is the authoritative reference 
 ## Endpoints
 
 ```
-GET https://secid.cloudsecurityalliance.org/api/v1/resolve?secid={encoded_secid}
+GET https://secid.cloudsecurityalliance.org/api/v1/resolve?secid={encoded_secid}[&country={iso_country_code}]
 ```
 
-`/api/v1/resolve` is the only endpoint a client needs; every lookup goes through it. Two read-only companions exist and the reference clients do not use them:
+`/api/v1/resolve` is the only endpoint a client needs; every lookup goes through it. Reference and AI-generated clients intentionally wrap only `/api/v1/resolve`. Two read-only companion endpoints exist for bulk or catalog use cases:
 
 | Endpoint | Returns |
 |----------|---------|
 | `GET /api/v1/types` | The type catalog: `{"types": [{"type", "description", "long_description", "namespace_count", "subtypes"}]}` |
-| `GET /api/v1/registry.json` | The full registry as one JSON document (about 4 MB) |
+| `GET /api/v1/registry.json` | The full compiled registry as one JSON document (about 4 MB) |
+
+### Country Filter and Wildcards
+
+- **Country filter (two equivalent forms):**
+  1. **SecID qualifier (recommended for SDK clients):** Append `?country=XX` inside the SecID string before encoding (e.g., `secid:regulation?country=DE` or `secid:regulation/bsi.bund.de/it-grundschutz?country=DE`). Because the qualifier is part of the SecID string, `resolve(secid)` supports it with no extra method parameters.
+  2. **HTTP query parameter:** Pass `&country=XX` on the request URL (`GET /api/v1/resolve?secid=secid%3Aregulation&country=DE`).
+  Both filter results to the specified ISO 3166-1 alpha-2 country code (`DE`, `US`, `JP`, etc., case-insensitive) and attach a top-level `filter` object (`{"country": "DE", "total_before_filter": <number>}`) to the response envelope.
+- **Wildcard (`/*`):** Appending `/*` lists all child entries under a type or namespace — for example, `secid:control/*` lists all control namespaces and `secid:advisory/mitre.org/*` lists all advisory sources under `mitre.org`.
 
 ## Request
 
@@ -72,6 +80,7 @@ The API supports CORS. Browser-based clients can call it directly.
 | HTTP Code | When |
 |-----------|------|
 | `200` | Every query the resolver processed, including `not_found` and `error` statuses. A missing or empty `secid` parameter is also HTTP 200, with `status: "error"` and a guidance `message`. |
+| `500` | Unhandled internal resolver error. Returns a JSON envelope with `status: "error"`, `message`, and an `error_id` UUID for server log correlation. |
 | `5xx`, others | Outages, proxies, and gateways. The body may be HTML rather than JSON. |
 
 **Important:** HTTP 200 does NOT mean "found." Check the `status` field in the JSON body. Do not rely on a 400 for bad input: the live resolver answers `?secid=` and a request with no parameter at all with HTTP 200. A non-2xx response may still carry a JSON envelope (use its `status`); if it does not, or if any body is not a JSON object, report an error.
@@ -100,9 +109,11 @@ Content-Type: application/json
 | `secid_query` | string | No | Verbatim echo of client input (decoded form) |
 | `status` | string | No | One of: `found`, `corrected`, `related`, `not_found`, `error` |
 | `results` | array | No | Array of result objects (may be empty `[]`) |
-| `message` | string | Yes | Present on `not_found` and `error`; absent/null otherwise |
+| `message` | string | Yes | Present on `not_found` and `error` (and some `corrected`/`related` responses); absent/null otherwise |
+| `filter` | object (optional) | No | Present when a `country` filter was applied: `{"country": "<ISO code>", "total_before_filter": <number>}` |
+| `error_id` | string (optional) | No | UUID present on HTTP 500 unhandled server errors for log correlation |
 
-Clients must ignore fields they do not recognise. The server adds them ahead of this document: `lang` on resolution results, and a top-level `filter` object (`{"country": …, "total_before_filter": …}`) when a `country` query parameter is applied, both ship today.
+**Forward-compatibility rule:** Clients must tolerate and ignore fields they do not recognize on both the top-level envelope and individual result objects. Never use strict schema deserialization (`DisallowUnknownFields`, `additionalProperties: false`, etc.) that rejects responses when the server adds new fields ahead of the SDK.
 
 #### Resolution Result Object
 
@@ -121,6 +132,7 @@ Present when the query resolved to specific URL(s):
 | `secid` | string | Fully-qualified SecID for this result |
 | `weight` | number | Match quality: 100 (authoritative), 80 (high-quality secondary), 50 (indirect/alternative). Integers today, but accept any JSON number. |
 | `url` | string | Resolved URL where the resource can be found |
+| `lang` | string (optional) | ISO 639-1 language code of the resource at the URL (e.g., `"en"`, `"de"`, `"fr"`), present when a source provides language-specific URLs |
 | `content_type` | string (optional) | MIME type of the resource at the URL (e.g., `application/json`, `text/html`) |
 | `parsability` | string (optional) | Whether the resource is `structured` (machine-readable) or `scraped` (requires HTML parsing) |
 | `schema` | string (optional) | SecID reference to the data schema for the resource (e.g., `secid:reference/mitre.org/cvelistV5`) |
@@ -271,3 +283,34 @@ Ten types, matching `GET /api/v1/types`:
 | `secid:control/nist.gov/csf@2.0#PR.AC-1` | NIST CSF control |
 | `secid:advisory/CVE-2021-44228` | Cross-source search (all advisory sources) |
 | `secid:advisory` | List all advisory namespaces |
+| `secid:control/*` | List all control namespaces (wildcard) |
+| `secid:regulation?country=DE` | List regulation namespaces filtered to Germany (`DE`) |
+
+## MCP Server Surface
+
+For AI assistants and agent frameworks that speak the Model Context Protocol (MCP), SecID exposes a stateless Streamable HTTP MCP server at:
+
+```
+https://secid.cloudsecurityalliance.org/mcp
+```
+
+**When to use MCP vs an HTTP client:** Connect MCP-capable AI agents directly to `/mcp` — the tools are self-describing and require no client code. Build or install an HTTP client (`resolve`, `lookup`, `best_url`) for application code, backend services, CLI scripts, and environments without MCP support.
+
+### MCP Tools
+
+| Tool | Parameters | Description |
+|------|------------|-------------|
+| `resolve` | `secid` (string), `country?` (string) | Resolve a SecID string to URLs or registry browsing data (same contract as `GET /api/v1/resolve`). |
+| `lookup` | `type` (enum), `id` (string) | Cross-source search for an identifier across all namespaces of a type (equivalent to `resolve("secid:{type}/{id}")`). |
+| `describe` | `secid` (string) | Return full registry metadata (description, patterns, examples, children, notes, regulations) for a type, namespace, or source in a single call. |
+| `submit_feedback` | `secid_query` (string), `feedback_type` (`missing_source` \| `wrong_result` \| `broken_url` \| `pattern_gap` \| `general`), `description` (string), `suggested_correction?` (string), `source_url?` (string) | Submit structured feedback when a query returns `not_found`, a URL is broken, or a source is missing from the registry. |
+
+### MCP Resources
+
+| Resource URI | Returns |
+|--------------|---------|
+| `secid://registry` | Top-level overview of all 10 SecID types (`text/markdown`) |
+| `secid://registry/{type}` | Namespace listing for a specific type, e.g. `secid://registry/advisory` (`text/markdown`) |
+| `secid://docs/build-a-client` | Complete guide for building a SecID HTTP client (`BUILD-A-CLIENT.md`) |
+| `secid://docs/prompt-template` | Copy-paste prompt template for generating a client in any language (`PROMPT-TEMPLATE.md`) |
+| `secid://docs/feedback` | Guide for submitting high-signal registry feedback via `submit_feedback` |

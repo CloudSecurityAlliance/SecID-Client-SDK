@@ -26,9 +26,9 @@ The reference clients encode the *entire* SecID (`quote(safe="")` / `encodeURICo
 
 ## API Summary
 
-Primary endpoint: `GET /api/v1/resolve?secid={encoded_secid}`. Two more exist and the clients do not use them: `GET /api/v1/types` (type catalog) and `GET /api/v1/registry.json` (full registry dump, ~4 MB).
+Primary endpoint: `GET /api/v1/resolve?secid={encoded_secid}` (optional `&country=XX` query param or `?country=XX` SecID qualifier; `/*` wildcard lists children). Two more read-only endpoints exist and the clients do not use them: `GET /api/v1/types` (type catalog) and `GET /api/v1/registry.json` (full registry dump, ~4 MB).
 
-Response envelope: `{secid_query, status, results[], message?}`
+Response envelope: `{secid_query, status, results[], message?, filter?, error_id?}`
 
 Five statuses: `found`, `corrected`, `related`, `not_found`, `error`
 
@@ -36,9 +36,9 @@ Two result types:
 - **Resolution:** `{secid, weight, url}` — item resolved to URL(s)
 - **Registry:** `{secid, data}` — browsing/discovery info
 
-Resolution results may also include optional format metadata: `content_type` (MIME type), `parsability` (`structured` or `scraped`), `schema` (SecID reference to data schema), `parsing_instructions` (SecID reference to parsing guide), `auth` (free-text access description). These are absent when the registry hasn't documented them yet.
+Resolution results may also include optional metadata: `lang` (ISO 639-1 language code), `content_type` (MIME type), `parsability` (`structured` or `scraped`), `schema` (SecID reference to data schema), `parsing_instructions` (SecID reference to parsing guide), `auth` (free-text access description). These are absent when the registry hasn't documented them yet.
 
-Clients must tolerate unknown fields. The server adds them ahead of the SDK — `lang` on resolution results and a top-level `filter` object (returned when a `country` filter is applied) both ship today and are undocumented here.
+Clients must tolerate unknown fields. The server adds them ahead of the SDK (for example `lang` on resolution results, `filter` when a `country` filter is applied, and `error_id` on HTTP 500 responses). See `skills/build-a-client/API-CONTRACT.md` for the full HTTP and MCP surface.
 
 ## Project Structure & File Purposes
 
@@ -100,7 +100,7 @@ Two independent fixture suites with different subjects:
 
 | Suite | Fixtures | Tests | Harness |
 |-------|----------|-------|---------|
-| `tests/fixtures.json` | 35 | **Client** behavior against a per-language mock HTTP server | Python, TypeScript, Go |
+| `tests/fixtures.json` | 45 | **Client** behavior against a per-language mock HTTP server | Python, TypeScript, Go |
 | `tests/conformance/fixtures.json` | 10 | **Resolver** behavior against a live or local API | `tests/conformance-harness/python/run.py` (Python only) |
 
 The client suite is the main guard against language drift: all three harnesses read the same JSON and assert the same outcomes, so changing one client's behavior fails its siblings' builds until they follow. **Add behavior to `tests/fixtures.json` first, then make each language pass** — a new fixture needs no harness edits. Keep fixture names stable and descriptive, and keep language harnesses in sync with the fixture schema.

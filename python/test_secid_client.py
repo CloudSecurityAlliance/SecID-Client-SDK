@@ -137,6 +137,32 @@ def connection_refused_tests():
     return [t for t in FIXTURES if t["mock_response"].get("behavior") == "connection_refused"]
 
 
+def _invoke_response(client: SecIDClient, inp: dict):
+    method = inp.get("method", "resolve")
+    if method == "lookup":
+        args = inp["args"]
+        return client.lookup(args["type"], args["identifier"])
+    if method == "resolve":
+        return client.resolve(inp["secid"])
+    raise ValueError(f"Unsupported fixture method: {method}")
+
+
+def _assert_request_url(expected: dict):
+    if "request_url_contains" in expected:
+        assert len(MockHandler.recorded_urls) > 0, "No request recorded"
+        url = MockHandler.recorded_urls[-1]
+        assert expected["request_url_contains"] in url, (
+            f"Request URL should contain '{expected['request_url_contains']}', got: {url}"
+        )
+
+    if "request_url_not_contains" in expected:
+        assert len(MockHandler.recorded_urls) > 0, "No request recorded"
+        url = MockHandler.recorded_urls[-1]
+        assert expected["request_url_not_contains"] not in url, (
+            f"Request URL should NOT contain '{expected['request_url_not_contains']}', got: {url}"
+        )
+
+
 @pytest.mark.parametrize(
     "fixture",
     standard_tests(),
@@ -146,6 +172,7 @@ def test_fixture(fixture, mock_server):
     port = mock_server
     configure_mock(fixture["mock_response"])
     expected = fixture["expected"]
+    inp = fixture["input"]
 
     # Use short timeout for timeout tests
     is_timeout = fixture["mock_response"].get("behavior") == "timeout"
@@ -153,9 +180,20 @@ def test_fixture(fixture, mock_server):
 
     client = SecIDClient(base_url=f"http://127.0.0.1:{port}", timeout=timeout)
 
+    if inp.get("method") == "best_url":
+        url = client.best_url(inp["secid"])
+        if expected.get("raises_error"):
+            assert url is None, f"best_url: expected None on error, got {url}"
+            return
+        assert url == expected.get("best_url"), (
+            f"best_url: expected {expected.get('best_url')}, got {url}"
+        )
+        _assert_request_url(expected)
+        return
+
     if expected.get("raises_error"):
         # The Python client never raises: every failure is status="error".
-        resp = client.resolve(fixture["input"]["secid"])
+        resp = _invoke_response(client, inp)
         assert resp.status == "error", f"Expected error status, got status={resp.status}"
         if "error_contains" in expected:
             assert resp.message and expected["error_contains"].lower() in resp.message.lower(), (
@@ -163,8 +201,8 @@ def test_fixture(fixture, mock_server):
             )
         return
 
-    # Normal test: call resolve and check expected fields
-    resp = client.resolve(fixture["input"]["secid"])
+    # Normal test: call resolve/lookup and check expected fields
+    resp = _invoke_response(client, inp)
 
     if "status" in expected:
         assert resp.status == expected["status"], (
@@ -204,20 +242,17 @@ def test_fixture(fixture, mock_server):
                 f"message: expected {expected['message']}, got {resp.message}"
             )
 
-    # Encoding assertions: check the URL the client actually sent
-    if "request_url_contains" in expected:
-        assert len(MockHandler.recorded_urls) > 0, "No request recorded"
-        url = MockHandler.recorded_urls[-1]
-        assert expected["request_url_contains"] in url, (
-            f"Request URL should contain '{expected['request_url_contains']}', got: {url}"
-        )
+    if "first_resolution_result" in expected:
+        assert len(resp.resolution_results) > 0, "Expected at least one resolution result"
+        first = resp.resolution_results[0]
+        for field_name, want in expected["first_resolution_result"].items():
+            actual = first.get(field_name)
+            assert actual == want, (
+                f"first_resolution_result.{field_name}: expected {want!r}, got {actual!r}"
+            )
 
-    if "request_url_not_contains" in expected:
-        assert len(MockHandler.recorded_urls) > 0, "No request recorded"
-        url = MockHandler.recorded_urls[-1]
-        assert expected["request_url_not_contains"] not in url, (
-            f"Request URL should NOT contain '{expected['request_url_not_contains']}', got: {url}"
-        )
+    # Encoding assertions: check the URL the client actually sent
+    _assert_request_url(expected)
 
 
 @pytest.mark.parametrize(

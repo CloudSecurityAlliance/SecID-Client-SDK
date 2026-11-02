@@ -62,6 +62,8 @@ Every response — success or failure — has the same shape:
 | `results` | array | Yes | Zero or more result objects (may be empty) |
 | `message` | string | Only on `not_found`/`error` | Human/AI-readable guidance |
 
+**Tolerate unknown fields:** The server adds optional fields ahead of the SDK — such as top-level `filter` (`{country, total_before_filter}`) and `error_id`, or per-result `lang` and format metadata (`content_type`, `parsability`, `schema`, `parsing_instructions`, `auth`). Never use strict schema deserialization (`DisallowUnknownFields`, `additionalProperties: false`, etc.) that rejects responses with unrecognized keys.
+
 ## Five Status Values
 
 | Status | Meaning | What to Do |

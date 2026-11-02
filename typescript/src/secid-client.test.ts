@@ -28,7 +28,11 @@ interface Fixture {
   name: string;
   description: string;
   category: string;
-  input: { secid: string; method: string };
+  input: {
+    secid?: string;
+    method: string;
+    args?: { type: string; identifier: string };
+  };
   mock_response: {
     http_status?: number;
     body?: Record<string, unknown>;
@@ -44,6 +48,7 @@ interface Fixture {
     resolution_result_count?: number;
     registry_result_count?: number;
     message?: string | null;
+    first_resolution_result?: Record<string, string | null>;
     raises_error?: boolean;
     error_contains?: string;
     request_url_contains?: string;
@@ -112,6 +117,36 @@ function createMockServer(): Promise<number> {
 // Test helpers
 // ---------------------------------------------------------------------------
 
+function invokeResponse(client: SecIDClient, input: Fixture["input"]): Promise<SecIDResponse> {
+  if (input.method === "lookup") {
+    return client.lookup(input.args!.type, input.args!.identifier);
+  }
+  if (input.method === "resolve") {
+    return client.resolve(input.secid!);
+  }
+  throw new Error(`Unsupported fixture method: ${input.method}`);
+}
+
+function assertRequestUrl(expected: Fixture["expected"]) {
+  if ("request_url_contains" in expected) {
+    assert.ok(recordedUrls.length > 0, "No request recorded");
+    const url = recordedUrls[recordedUrls.length - 1];
+    assert.ok(
+      url.includes(expected.request_url_contains!),
+      `Request URL should contain '${expected.request_url_contains}', got: ${url}`,
+    );
+  }
+
+  if ("request_url_not_contains" in expected) {
+    assert.ok(recordedUrls.length > 0, "No request recorded");
+    const url = recordedUrls[recordedUrls.length - 1];
+    assert.ok(
+      !url.includes(expected.request_url_not_contains!),
+      `Request URL should NOT contain '${expected.request_url_not_contains}', got: ${url}`,
+    );
+  }
+}
+
 function assertExpected(fixture: Fixture, resp: { status: string; bestUrl?: string; wasCorrected: boolean; resolutionResults: unknown[]; registryResults: unknown[]; message?: string }) {
   const expected = fixture.expected;
 
@@ -155,23 +190,16 @@ function assertExpected(fixture: Fixture, resp: { status: string; bestUrl?: stri
     }
   }
 
-  if ("request_url_contains" in expected) {
-    assert.ok(recordedUrls.length > 0, "No request recorded");
-    const url = recordedUrls[recordedUrls.length - 1];
-    assert.ok(
-      url.includes(expected.request_url_contains!),
-      `Request URL should contain '${expected.request_url_contains}', got: ${url}`,
-    );
+  if (expected.first_resolution_result) {
+    assert.ok(resp.resolutionResults.length > 0, "Expected at least one resolution result");
+    const first = resp.resolutionResults[0] as Record<string, unknown>;
+    for (const [key, want] of Object.entries(expected.first_resolution_result)) {
+      const actual = first[key] ?? null;
+      assert.equal(actual, want, `first_resolution_result.${key} mismatch`);
+    }
   }
 
-  if ("request_url_not_contains" in expected) {
-    assert.ok(recordedUrls.length > 0, "No request recorded");
-    const url = recordedUrls[recordedUrls.length - 1];
-    assert.ok(
-      !url.includes(expected.request_url_not_contains!),
-      `Request URL should NOT contain '${expected.request_url_not_contains}', got: ${url}`,
-    );
-  }
+  assertRequestUrl(expected);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,9 +226,20 @@ describe("SecID Client (fixtures)", () => {
       const timeoutMs = isTimeout ? 1000 : 5000;
       const client = new SecIDClient(`http://127.0.0.1:${mockPort}`, timeoutMs);
 
+      if (fixture.input.method === "best_url") {
+        const url = await client.bestUrl(fixture.input.secid!);
+        if (fixture.expected.raises_error) {
+          assert.equal(url, undefined, `Expected undefined bestUrl on error for ${fixture.name}`);
+          return;
+        }
+        assert.equal(url, fixture.expected.best_url ?? undefined, `bestUrl mismatch for ${fixture.name}`);
+        assertRequestUrl(fixture.expected);
+        return;
+      }
+
       if (fixture.expected.raises_error) {
         // TS client never throws — it returns SecIDResponse with status="error"
-        const resp = await client.resolve(fixture.input.secid);
+        const resp = await invokeResponse(client, fixture.input);
         assert.equal(resp.status, "error", `Expected error status for ${fixture.name}`);
         if (fixture.expected.error_contains && resp.message) {
           assert.ok(
@@ -209,7 +248,7 @@ describe("SecID Client (fixtures)", () => {
           );
         }
       } else {
-        const resp = await client.resolve(fixture.input.secid);
+        const resp = await invokeResponse(client, fixture.input);
         assertExpected(fixture, resp);
       }
     });
@@ -225,7 +264,7 @@ describe("SecID Client (connection refused)", () => {
   for (const fixture of connectionRefusedFixtures) {
     it(fixture.name, async () => {
       const client = new SecIDClient("http://127.0.0.1:1", 2000);
-      const resp = await client.resolve(fixture.input.secid);
+      const resp = await invokeResponse(client, fixture.input);
       assert.equal(resp.status, "error", "Expected error status on connection refused");
     });
   }

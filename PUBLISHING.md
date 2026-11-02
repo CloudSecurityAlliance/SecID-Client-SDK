@@ -29,7 +29,7 @@ simple regardless of the distribution name.
 - **PyPI:** an account with upload rights, plus an API token. The modern flow
   uses a token (username `__token__`, password `pypi-…`); store it in
   `~/.pypirc` or pass it to `twine`. `twine` itself can be run without a global
-  install via `pipx run twine`.
+  install via `uvx twine`.
 
 ---
 
@@ -73,8 +73,8 @@ From `python/`:
 cd python
 rm -rf dist/ build/ *.egg-info        # clear any stale artifacts (IMPORTANT — see below)
 python3 -m build                       # builds sdist + wheel into dist/
-pipx run twine check dist/*            # validate metadata + README rendering (expect PASSED)
-pipx run twine upload dist/*           # real upload
+uvx twine check dist/*                 # validate metadata + README rendering (expect PASSED)
+uvx twine upload dist/*                # real upload
 ```
 
 Notes:
@@ -88,7 +88,7 @@ Notes:
 - The import module stays `secid_client` and the console script stays `secid`
   even though the distribution is `cloudsecurityalliance-secid`.
 - To test the upload against TestPyPI first:
-  `pipx run twine upload --repository testpypi dist/*`.
+  `uvx twine upload --repository testpypi dist/*`.
 
 Verify after publishing:
 

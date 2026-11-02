@@ -32,8 +32,14 @@ type Fixture struct {
 }
 
 type FixtureInput struct {
-	SecID  string `json:"secid"`
-	Method string `json:"method"`
+	SecID  string            `json:"secid"`
+	Method string            `json:"method"`
+	Args   *FixtureInputArgs `json:"args,omitempty"`
+}
+
+type FixtureInputArgs struct {
+	Type       string `json:"type"`
+	Identifier string `json:"identifier"`
 }
 
 type MockResponse struct {
@@ -46,16 +52,17 @@ type MockResponse struct {
 }
 
 type FixtureExpected struct {
-	Status                *string `json:"status,omitempty"`
-	BestURL               *string `json:"best_url"` // pointer to distinguish null from absent
-	WasCorrected          *bool   `json:"was_corrected,omitempty"`
-	ResolutionResultCount *int    `json:"resolution_result_count,omitempty"`
-	RegistryResultCount   *int    `json:"registry_result_count,omitempty"`
-	Message               *string `json:"message"` // pointer to distinguish null from absent
-	RaisesError           bool    `json:"raises_error,omitempty"`
-	ErrorContains         string  `json:"error_contains,omitempty"`
-	RequestURLContains    string  `json:"request_url_contains,omitempty"`
-	RequestURLNotContains string  `json:"request_url_not_contains,omitempty"`
+	Status                *string            `json:"status,omitempty"`
+	BestURL               *string            `json:"best_url"` // pointer to distinguish null from absent
+	WasCorrected          *bool              `json:"was_corrected,omitempty"`
+	ResolutionResultCount *int               `json:"resolution_result_count,omitempty"`
+	RegistryResultCount   *int               `json:"registry_result_count,omitempty"`
+	Message               *string            `json:"message"` // pointer to distinguish null from absent
+	FirstResolutionResult map[string]*string `json:"first_resolution_result,omitempty"`
+	RaisesError           bool               `json:"raises_error,omitempty"`
+	ErrorContains         string             `json:"error_contains,omitempty"`
+	RequestURLContains    string             `json:"request_url_contains,omitempty"`
+	RequestURLNotContains string             `json:"request_url_not_contains,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -156,12 +163,34 @@ func TestFixtures(t *testing.T) {
 				client.HTTPClient.Timeout = 5 * time.Second
 			}
 
+			if fixture.Input.Method == "best_url" {
+				u, err := client.BestURL(fixture.Input.SecID)
+				if fixture.Expected.RaisesError {
+					if err == nil && u != "" {
+						t.Errorf("Expected error or empty URL from BestURL, got %q", u)
+					}
+					return
+				}
+				if err != nil {
+					t.Fatalf("Unexpected error from BestURL: %v", err)
+				}
+				want := ""
+				if fixture.Expected.BestURL != nil {
+					want = *fixture.Expected.BestURL
+				}
+				if u != want {
+					t.Errorf("BestURL: expected %q, got %q", want, u)
+				}
+				assertRequestURL(t, fixture.Expected, recordedURLs)
+				return
+			}
+
 			if fixture.Expected.RaisesError {
 				testErrorCase(t, client, fixture)
 				return
 			}
 
-			resp, err := client.Resolve(fixture.Input.SecID)
+			resp, err := invokeResponse(t, client, fixture.Input)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}
@@ -171,9 +200,25 @@ func TestFixtures(t *testing.T) {
 	}
 }
 
+func invokeResponse(t *testing.T, client *Client, input FixtureInput) (*Response, error) {
+	t.Helper()
+	switch input.Method {
+	case "", "resolve":
+		return client.Resolve(input.SecID)
+	case "lookup":
+		if input.Args == nil {
+			t.Fatal("lookup fixture missing input.args")
+		}
+		return client.Lookup(input.Args.Type, input.Args.Identifier)
+	default:
+		t.Fatalf("unsupported fixture method %q", input.Method)
+		return nil, nil
+	}
+}
+
 func testErrorCase(t *testing.T, client *Client, fixture Fixture) {
 	t.Helper()
-	resp, err := client.Resolve(fixture.Input.SecID)
+	resp, err := invokeResponse(t, client, fixture.Input)
 
 	// Go client may return error OR a Response with status="error"
 	if err != nil {
@@ -199,12 +244,37 @@ func testConnectionRefused(t *testing.T, fixture Fixture) {
 	client := NewClient("http://127.0.0.1:1")
 	client.HTTPClient.Timeout = 2 * time.Second
 
-	resp, err := client.Resolve(fixture.Input.SecID)
+	resp, err := invokeResponse(t, client, fixture.Input)
 	if err != nil {
 		return // Error is expected
 	}
 	if resp.Status != "error" {
 		t.Errorf("Expected error or status='error', got status=%q", resp.Status)
+	}
+}
+
+func assertRequestURL(t *testing.T, exp FixtureExpected, recordedURLs []string) {
+	t.Helper()
+	if exp.RequestURLContains != "" {
+		if len(recordedURLs) == 0 {
+			t.Error("No request recorded")
+		} else {
+			url := recordedURLs[len(recordedURLs)-1]
+			if !strings.Contains(url, exp.RequestURLContains) {
+				t.Errorf("Request URL should contain %q, got: %s", exp.RequestURLContains, url)
+			}
+		}
+	}
+
+	if exp.RequestURLNotContains != "" {
+		if len(recordedURLs) == 0 {
+			t.Error("No request recorded")
+		} else {
+			url := recordedURLs[len(recordedURLs)-1]
+			if strings.Contains(url, exp.RequestURLNotContains) {
+				t.Errorf("Request URL should NOT contain %q, got: %s", exp.RequestURLNotContains, url)
+			}
+		}
 	}
 }
 
@@ -260,27 +330,37 @@ func assertExpected(t *testing.T, fixture Fixture, resp *Response, recordedURLs 
 		}
 	}
 
-	if exp.RequestURLContains != "" {
-		if len(recordedURLs) == 0 {
-			t.Error("No request recorded")
-		} else {
-			url := recordedURLs[len(recordedURLs)-1]
-			if !strings.Contains(url, exp.RequestURLContains) {
-				t.Errorf("Request URL should contain %q, got: %s", exp.RequestURLContains, url)
+	if exp.FirstResolutionResult != nil {
+		resolved := resp.ResolutionResults()
+		if len(resolved) == 0 {
+			t.Fatal("first_resolution_result: expected at least one resolution result")
+		}
+		first := resolved[0]
+		fields := map[string]string{
+			"secid":                first.SecID,
+			"url":                  first.URL,
+			"content_type":         first.ContentType,
+			"parsability":          first.Parsability,
+			"schema":               first.Schema,
+			"parsing_instructions": first.ParseInstructions,
+			"auth":                 first.Auth,
+		}
+		for k, wantPtr := range exp.FirstResolutionResult {
+			actual, ok := fields[k]
+			if !ok {
+				t.Fatalf("unsupported first_resolution_result field %q", k)
+			}
+			want := ""
+			if wantPtr != nil {
+				want = *wantPtr
+			}
+			if actual != want {
+				t.Errorf("first_resolution_result.%s: expected %q, got %q", k, want, actual)
 			}
 		}
 	}
 
-	if exp.RequestURLNotContains != "" {
-		if len(recordedURLs) == 0 {
-			t.Error("No request recorded")
-		} else {
-			url := recordedURLs[len(recordedURLs)-1]
-			if strings.Contains(url, exp.RequestURLNotContains) {
-				t.Errorf("Request URL should NOT contain %q, got: %s", exp.RequestURLNotContains, url)
-			}
-		}
-	}
+	assertRequestURL(t, exp, recordedURLs)
 }
 
 func intPtr(i int) *int       { return &i }
