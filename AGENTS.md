@@ -132,7 +132,7 @@ Public surface is deliberately parallel across languages: `resolve`, `lookup`, `
 
 ## Packaging
 
-To be published as `cloudsecurityalliance-secid` (PyPI) and `@cloudsecurityalliance/secid` (npm); neither is on its registry yet, so README "Path 1" gives install-from-git commands. Go is consumed by module path and released with `go/vX.Y.Z` tags (the module is in `go/`). Release steps, including the opt-in `release.yml` workflow, are in `PUBLISHING.md`. Each language has one version source (`__version__`, `package.json` plus a test-enforced `VERSION` literal, and Go `Version`), and the User-Agent is built from it. The distribution name carries the org prefix only where the registry is flat; the import module (`secid_client`) and CLI command (`secid`) stay unprefixed. TypeScript is the only target with a build step (`tsc` → `dist/`) — Python and Go ship the single source file.
+Published as `csa-secid` (PyPI) and `github.com/CloudSecurityAlliance/SecID-Client-SDK/go` (Go module proxy via `go/vX.Y.Z` tags); `@cloudsecurityalliance/secid` (npm) is not on npm yet, so README "Path 1" gives tarball install commands for Node. Release steps, including the `release.yml` workflow, are in `PUBLISHING.md`. Each language has one version source (`__version__`, `package.json` plus a test-enforced `VERSION` literal, and Go `Version`), and the User-Agent is built from it. The distribution name carries the `csa-` prefix where the registry is flat (PyPI); the import module (`secid_client`) and CLI command (`secid`) stay unprefixed. TypeScript is the only target with a build step (`tsc` → `dist/`) — Python and Go ship the single source file.
 
 ## Design Constraints
 

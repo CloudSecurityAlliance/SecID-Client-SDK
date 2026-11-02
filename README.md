@@ -12,32 +12,25 @@ The primary artifact here is **instructions that AI assistants follow to build c
 
 ### Path 1: Install a Package
 
-> **Not on PyPI or npm yet.** The packages are named `cloudsecurityalliance-secid`
-> (PyPI) and `@cloudsecurityalliance/secid` (npm), but neither has been published,
-> so `pip install cloudsecurityalliance-secid` and
-> `npm install @cloudsecurityalliance/secid` fail today. Until they are, install
-> from this repository:
-
 ```bash
-# Python 3.9+ — pip installs straight from the python/ subdirectory
-pip install "git+https://github.com/CloudSecurityAlliance/SecID-Client-SDK#subdirectory=python"
+# Python 3.9+ (PyPI)
+pip install csa-secid
 
-# Node 18+ — npm cannot install from a subdirectory of a git repo, so build a tarball
+# Go 1.21+ — Go fetches modules from GitHub directly
+go get github.com/CloudSecurityAlliance/SecID-Client-SDK/go@latest
+go install github.com/CloudSecurityAlliance/SecID-Client-SDK/go/cmd/secid@latest
+
+# Node 18+ — @cloudsecurityalliance/secid is not yet published on npm; build a tarball from this repo:
 git clone https://github.com/CloudSecurityAlliance/SecID-Client-SDK
 (cd SecID-Client-SDK/typescript && npm ci && npm pack)   # writes cloudsecurityalliance-secid-1.0.0.tgz
 npm install ./SecID-Client-SDK/typescript/cloudsecurityalliance-secid-1.0.0.tgz
-
-# Go 1.21+ — Go fetches modules from GitHub directly; no registry involved
-go get github.com/CloudSecurityAlliance/SecID-Client-SDK/go@latest
-go install github.com/CloudSecurityAlliance/SecID-Client-SDK/go/cmd/secid@latest
 ```
 
 Or skip installing entirely: each client is a single file (Path 4).
 
-Once published, the registry commands will be:
+Once the npm package is published, the Node registry command will be:
 
 ```bash
-pip install cloudsecurityalliance-secid      # Python 3.9+
 npm install @cloudsecurityalliance/secid     # Node 18+
 ```
 
@@ -72,11 +65,10 @@ url := resp.BestURL()
 > **Package naming (CSA convention).** Where the registry provides a namespace
 > (npm scopes, Go module paths), the package keeps a simple name under the org
 > namespace — `@cloudsecurityalliance/secid`, `github.com/CloudSecurityAlliance/…`.
-> Where the registry is flat (PyPI), the distribution name carries the org prefix:
-> `cloudsecurityalliance-secid` (default to the full `cloudsecurityalliance-`
-> prefix; fall back to `csa-` only when the name would otherwise be too long or
-> the registry constrains length). Import modules and CLI commands stay simple
-> (`secid_client`, the `secid` command) regardless.
+> Where the registry is flat (PyPI), the distribution name carries the `csa-`
+> prefix (`csa-secid`) to match the rest of CSA's Python packages. Import
+> modules and CLI commands stay simple (`secid_client`, the `secid` command)
+> regardless.
 
 ### Path 2: AI-to-AI (MCP)
 
@@ -145,7 +137,7 @@ SecID-Client-SDK/
 │       ├── API-CONTRACT.md        # Formal API spec (request, response, encoding)
 │       ├── RESULT-HANDLING.md     # Statuses, weights, cross-source, versions
 │       └── PROMPT-TEMPLATE.md     # Copy-paste prompt for any language
-├── python/                        # PyPI: cloudsecurityalliance-secid (not yet published)
+├── python/                        # PyPI: csa-secid
 │   ├── secid_client.py            # Python client — stdlib only
 │   ├── pyproject.toml             # Package config (hatchling)
 │   └── README.md                  # PyPI page
@@ -194,7 +186,7 @@ npx tsx typescript/src/secid-cli.ts "secid:advisory/mitre.org/cve#CVE-2021-44228
 ## Publishing
 
 Maintainers: see [PUBLISHING.md](PUBLISHING.md) for how to publish the npm
-(`@cloudsecurityalliance/secid`) and PyPI (`cloudsecurityalliance-secid`)
+(`@cloudsecurityalliance/secid`) and PyPI (`csa-secid`)
 packages.
 
 ## License

@@ -2,7 +2,7 @@
 
 ## Executive summary
 
-`SecID-Client-SDK` provides AI-consumable client-building instructions (`skills/build-a-client/`), zero-dependency single-file reference clients in Python (`python/secid_client.py`), TypeScript (`typescript/src/secid-client.ts`), and Go (`go/secid.go`), and the shared cross-language client fixture suite (`tests/fixtures.json`) and resolver conformance harness (`tests/conformance/fixtures.json` + `tests/conformance-harness/python/run.py`). Instead of forcing developers to audit heavyweight third-party packages, `SecID-Client-SDK` makes integrating SecID trivial across any language — whether by copying a ~320–335-line stdlib-only file, installing a lightweight package (`cloudsecurityalliance-secid`, `@cloudsecurityalliance/secid`, `github.com/CloudSecurityAlliance/SecID-Client-SDK/go`), or handing `PROMPT-TEMPLATE.md` to an AI coding assistant.
+`SecID-Client-SDK` provides AI-consumable client-building instructions (`skills/build-a-client/`), zero-dependency single-file reference clients in Python (`python/secid_client.py`), TypeScript (`typescript/src/secid-client.ts`), and Go (`go/secid.go`), and the shared cross-language client fixture suite (`tests/fixtures.json`) and resolver conformance harness (`tests/conformance/fixtures.json` + `tests/conformance-harness/python/run.py`). Instead of forcing developers to audit heavyweight third-party packages, `SecID-Client-SDK` makes integrating SecID trivial across any language — whether by copying a ~320–335-line stdlib-only file, installing a lightweight package (`csa-secid`, `@cloudsecurityalliance/secid`, `github.com/CloudSecurityAlliance/SecID-Client-SDK/go`), or handing `PROMPT-TEMPLATE.md` to an AI coding assistant.
 
 ## Business benefit categories
 

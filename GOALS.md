@@ -12,7 +12,7 @@ Make consuming SecID effortless and safe in any programming language or AI workf
   - **Success metrics:**
     - 100% pass rate across the CI matrix (`.github/workflows/test.yml`: Python 3.9–3.13, Node 18/20/22, Go 1.21–1.23).
     - 100% pass rate on the resolver conformance suite (`tests/conformance/fixtures.json`) against production `secid.cloudsecurityalliance.org` and `SecID-Server-API`.
-- **Objective:** Provide automated, reproducible package publishing for Python (`cloudsecurityalliance-secid` on PyPI), TypeScript (`@cloudsecurityalliance/secid` on npm), and Go (`github.com/CloudSecurityAlliance/SecID-Client-SDK/go`).
+- **Objective:** Provide automated, reproducible package publishing for Python (`csa-secid` on PyPI), TypeScript (`@cloudsecurityalliance/secid` on npm), and Go (`github.com/CloudSecurityAlliance/SecID-Client-SDK/go`).
   - **Success metrics:**
     - Tag-driven release workflow (`.github/workflows/release.yml`, [`PUBLISHING.md`](PUBLISHING.md)) passes pre-publish test gates and publishes cleanly for every `python/v*` (PyPI, when `PYPI_PUBLISH_ENABLED=true`) and `typescript/v*` (npm, when `NPM_PUBLISH_ENABLED=true`) release tag, and every `go/v*` tag passes CI (`.github/workflows/test.yml`) for direct Go module proxy consumption.
 

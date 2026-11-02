@@ -9,7 +9,7 @@ SecID is a universal grammar for security knowledge — CVEs, CWEs, ATT&CK techn
 ## Install
 
 ```bash
-pip install cloudsecurityalliance-secid
+pip install csa-secid
 ```
 
 ## CLI

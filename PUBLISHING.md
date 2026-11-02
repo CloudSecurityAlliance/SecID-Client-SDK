@@ -6,12 +6,12 @@ languages, three distribution channels:
 | Language   | Registry | Package name                       | Notes                          |
 |------------|----------|------------------------------------|--------------------------------|
 | TypeScript | npm      | `@cloudsecurityalliance/secid`     | Scoped, published **public**   |
-| Python     | PyPI     | `cloudsecurityalliance-secid`      | Flat namespace → org prefix    |
+| Python     | PyPI     | `csa-secid`                        | Flat namespace → `csa-` prefix |
 | Go         | (none)   | `github.com/CloudSecurityAlliance/SecID-Client-SDK/go` | Consumed by module path; no publish step |
 
 Naming follows the CSA package-naming convention: registries with a namespace
 (npm scopes, Go module paths) keep a simple name under the org namespace; flat
-registries (PyPI) carry the `cloudsecurityalliance-` prefix on the distribution
+registries (PyPI) carry the `csa-` prefix on the distribution
 name. The import module (`secid_client`) and the CLI command (`secid`) stay
 simple regardless of the distribution name.
 
@@ -65,7 +65,7 @@ Verify after publishing:
 npm view @cloudsecurityalliance/secid version
 ```
 
-## Python → PyPI (`cloudsecurityalliance-secid`)
+## Python → PyPI (`csa-secid`)
 
 From `python/`:
 
@@ -81,25 +81,25 @@ Notes:
 - **Always clear `dist/` first.** A stale wheel from an earlier build (e.g. an
   old `secid-0.1.0`) left in `dist/` would get picked up by `twine upload dist/*`
   and either fail or upload the wrong artifact. Alternatively, upload the exact
-  files: `twine upload dist/cloudsecurityalliance_secid-1.0.0*`.
+  files: `twine upload dist/csa_secid-1.0.0*`.
 - The **wheel** ships only `secid_client.py` (no tests); the **sdist** is the
   full source archive (includes the test file, which is normal — `pip install`
   uses the wheel).
 - The import module stays `secid_client` and the console script stays `secid`
-  even though the distribution is `cloudsecurityalliance-secid`.
+  even though the distribution is `csa-secid`.
 - To test the upload against TestPyPI first:
   `uvx twine upload --repository testpypi dist/*`.
 
 Verify after publishing:
 
 ```bash
-pip index versions cloudsecurityalliance-secid    # or: curl https://pypi.org/pypi/cloudsecurityalliance-secid/json
+pip index versions csa-secid    # or: curl https://pypi.org/pypi/csa-secid/json
 ```
 
 A clean end-to-end install check in a throwaway venv:
 
 ```bash
-python3 -m venv /tmp/secid-check && /tmp/secid-check/bin/pip install cloudsecurityalliance-secid
+python3 -m venv /tmp/secid-check && /tmp/secid-check/bin/pip install csa-secid
 /tmp/secid-check/bin/secid "secid:advisory/mitre.org/cve#CVE-2021-44228"
 rm -rf /tmp/secid-check
 ```
@@ -160,50 +160,45 @@ After bumping, re-run the dry-run / check steps above before each publish.
 
 ## State as of the first release
 
-**Nothing has been published yet** (checked 2026-09-24):
+**Current registry status** (updated 2026-11-02):
 
-- PyPI `cloudsecurityalliance-secid`: 404, name unclaimed.
-- npm `@cloudsecurityalliance/secid`: 404. No packages exist under the
-  `@cloudsecurityalliance` scope, so first confirm that the npm org exists and
-  that your account can publish to it.
-- Go: no `go/v*` tag exists. The repository does have a root `v1.0.0` tag, but
-  Go ignores it for the `go/` module (see the Go section).
+- PyPI `csa-secid`: Trusted Publisher configured (`CloudSecurityAlliance/SecID-Client-SDK`, `release.yml`, environment `pypi`) and `PYPI_PUBLISH_ENABLED=true`.
+- npm `@cloudsecurityalliance/secid`: not yet published.
+- Go: `github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v1.0.0` is live on `proxy.golang.org` (`go/v1.0.0` tag).
 
 All three are first releases at `1.0.0`, not renames, so there is nothing to
-deprecate. Local checks (2026-09-24): `python -m build` plus `twine check
+deprecate. Local checks: `python -m build` plus `twine check
 --strict` PASSED; the wheel holds only `secid_client.py` and installs a working
 `secid` CLI in a clean venv. `npm pack --dry-run` lists 7 files; a packed
 tarball installs into a scratch project, where both `npx secid` and `import`
 work. A scratch Go module imports `…/go` through a `replace` directive and
 builds.
 
-Until the registries are populated, the README tells users to install from git.
-Once you publish, update README "Path 1" to put the registry commands first.
-
 ---
 
-## Automated publishing (proposed)
+## Automated publishing
 
 `.github/workflows/release.yml` publishes from GitHub Actions when you push a
 release tag by hand:
 
 | Tag | Publishes | Auth |
 |---|---|---|
-| `python/vX.Y.Z` | PyPI `cloudsecurityalliance-secid` | **Trusted publishing** (OIDC). No token is stored anywhere. |
+| `python/vX.Y.Z` | PyPI `csa-secid` | **Trusted publishing** (OIDC). No token is stored anywhere. |
 | `typescript/vX.Y.Z` | npm `@cloudsecurityalliance/secid` | `NPM_TOKEN` secret, published with `--provenance` |
 | `go/vX.Y.Z` | nothing (the tag is the Go release) | — |
 
-Both jobs first check that the tag matches the version in code, then run the
-tests, then publish. **The workflow does nothing until you opt in:** each
-publish job is skipped unless a repository variable is set to `true`, so a tag
-pushed before setup is harmless.
+Both jobs first check that the tagged commit is an ancestor of `origin/main` and
+that the tag matches the version in code, then run the tests, then publish.
+**The workflow does nothing until you opt in:** each publish job is skipped
+unless a repository variable is set to `true`, so a tag pushed before setup is
+harmless.
 
 ### One-time setup: PyPI (trusted publishing)
 
 1. Sign in at <https://pypi.org> with the account that should own the project.
 2. Go to <https://pypi.org/manage/account/publishing/> and, under "Add a new
    pending publisher" (this reserves the name on first use), enter:
-   - PyPI project name: `cloudsecurityalliance-secid`
+   - PyPI project name: `csa-secid`
    - Owner: `CloudSecurityAlliance`
    - Repository name: `SecID-Client-SDK`
    - Workflow name: `release.yml`
