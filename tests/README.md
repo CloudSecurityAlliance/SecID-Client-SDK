@@ -21,7 +21,7 @@ Each language's test harness:
 
 ```bash
 # Python (from repo root)
-cd python && pip install -e . && python -m pytest test_secid_client.py -v
+cd python && python -m pytest test_secid_client.py -v
 
 # TypeScript (from repo root)
 cd typescript && npm install && npm test
@@ -36,10 +36,11 @@ cd go && go test -v ./...
 {
   "name": "test_name",
   "description": "What this tests and why",
-  "category": "found|corrected|related|not_found|error|encoding|client_error|edge_case",
+  "category": "found|corrected|related|not_found|error|encoding|lookup|best_url|client_error|edge_case",
   "input": {
     "secid": "secid:type/namespace/name#subpath",
-    "method": "resolve"
+    "method": "resolve|lookup|best_url",
+    "args": { "type": "advisory", "identifier": "CVE-2021-44228" }
   },
   "mock_response": {
     "http_status": 200,
@@ -51,7 +52,14 @@ cd go && go test -v ./...
     "was_corrected": false,
     "resolution_result_count": 4,
     "registry_result_count": 0,
-    "message": null
+    "message": null,
+    "first_resolution_result": {
+      "content_type": "application/json",
+      "parsability": "structured",
+      "schema": "secid:...",
+      "parsing_instructions": "secid:...",
+      "auth": "none"
+    }
   }
 }
 ```
@@ -85,6 +93,7 @@ cd go && go test -v ./...
 | `resolution_result_count` | integer | Count of results with a numeric weight and a valid http(s) url |
 | `registry_result_count` | integer | Count of results with data |
 | `message` | string\|null | Guidance message, or null |
+| `first_resolution_result` | object | Expected fields (`content_type`, `parsability`, `schema`, `parsing_instructions`, `auth`, `secid`, `url`) on `resolution_results[0]` (`null` means absent/unset) |
 | `raises_error` | boolean | Client should return error (exception or status="error") |
 | `error_contains` | string | Substring that should appear in error message |
 | `request_url_contains` | string | Substring that should appear in the HTTP request URL (the `encoding_*` fixtures use the full encoded query, so encodings must match byte for byte) |
@@ -100,14 +109,16 @@ cd go && go test -v ./...
 
 | Category | Tests | What's Verified |
 |----------|-------|-----------------|
-| `found` | Happy-path resolution | best_url selection, weight sorting, result counts |
+| `found` | Happy-path resolution | best_url selection, weight sorting, result counts, optional format metadata fields (`content_type`, `parsability`, `schema`, `parsing_instructions`, `auth`) |
 | `corrected` | Server-corrected input | was_corrected flag, corrected best_url |
 | `related` | Partial match / version required | Registry results, no resolution results |
 | `not_found` | Unknown namespace/type | Empty results, guidance message |
 | `error` | Empty/malformed input | Error status, guidance message |
 | `encoding` | `#`, `&`, `+`, space, `%`, `@`, `!'()*`, non-ASCII, colon, dot | Identical percent-encoding across languages, character preservation |
+| `lookup` | Cross-source `lookup(type, identifier)` | Builds `secid:{type}/{identifier}`, encodes special characters, handles unknown types |
+| `best_url` | Client `best_url`/`bestUrl`/`BestURL` method | Highest-weight selection, `null`/empty on registry-only or server error, error handling on invalid JSON |
 | `client_error` | Timeout, oversized, invalid JSON, `null`/`[]`/`{}` body, 500 | Graceful error handling |
-| `edge_case` | Empty results, registry-only, mixed, hostile URLs, mixed weight types, non-array results | Client doesn't crash on unusual shapes; best_url skips invalid URLs |
+| `edge_case` | Empty results, registry-only, mixed, hostile URLs, mixed weight types, non-array results, unknown envelope/result fields (`filter`, `lang`) | Client doesn't crash on unusual shapes or forward-compatible server fields; best_url skips invalid URLs |
 
 ## Cross-Language Error Handling
 
@@ -118,3 +129,15 @@ The three clients handle errors differently:
 - **Go** — `Resolve()` returns `(nil, error)` for network/parse failures, `(*Response, nil)` with `Status="error"` for server-reported errors
 
 For `raises_error` tests, each harness checks: **either** an exception/error occurred **or** the response has `status="error"`.
+
+## MCP Build-a-Client Doc Sync Check
+
+`check_mcp_docs_sync.py` verifies that the live or local `SecID-Service` MCP doc resources (`secid://docs/build-a-client` and `secid://docs/prompt-template`) match `skills/build-a-client/BUILD-A-CLIENT.md` and `skills/build-a-client/PROMPT-TEMPLATE.md`:
+
+```bash
+# Against local ../SecID-Service/src/mcp.ts
+python3 tests/check_mcp_docs_sync.py --local-mcp-ts ../SecID-Service/src/mcp.ts
+
+# Against live MCP endpoint
+python3 tests/check_mcp_docs_sync.py --target https://secid.cloudsecurityalliance.org
+```

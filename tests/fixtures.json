@@ -505,6 +505,40 @@
       }
     },
     {
+      "name": "client_network_error_best_url",
+      "description": "Connection refused when calling best_url() / bestUrl() / BestURL(). Returns null/undefined or error.",
+      "category": "client_error",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "best_url"
+      },
+      "mock_response": {
+        "behavior": "connection_refused"
+      },
+      "expected": {
+        "raises_error": true,
+        "best_url": null
+      }
+    },
+    {
+      "name": "client_network_error_lookup",
+      "description": "Connection refused when calling lookup(). Client returns error.",
+      "category": "client_error",
+      "input": {
+        "method": "lookup",
+        "args": {
+          "type": "advisory",
+          "identifier": "CVE-2021-44228"
+        }
+      },
+      "mock_response": {
+        "behavior": "connection_refused"
+      },
+      "expected": {
+        "raises_error": true
+      }
+    },
+    {
       "name": "empty_results_array",
       "description": "Server says 'found' but results=[] (shouldn't happen, but client shouldn't crash).",
       "category": "edge_case",
@@ -1079,6 +1113,343 @@
       },
       "expected": {
         "raises_error": true
+      }
+    },
+    {
+      "name": "lookup_found_cve",
+      "description": "Cross-source lookup(type, identifier) builds secid:{type}/{identifier} and resolves across advisory sources.",
+      "category": "lookup",
+      "input": {
+        "method": "lookup",
+        "args": {
+          "type": "advisory",
+          "identifier": "CVE-2021-44228"
+        }
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/CVE-2021-44228",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+              "weight": 100,
+              "url": "https://www.cve.org/CVERecord?id=CVE-2021-44228"
+            },
+            {
+              "secid": "secid:advisory/nist.gov/nvd#CVE-2021-44228",
+              "weight": 80,
+              "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-44228"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://www.cve.org/CVERecord?id=CVE-2021-44228",
+        "was_corrected": false,
+        "resolution_result_count": 2,
+        "registry_result_count": 0,
+        "message": null,
+        "request_url_contains": "secid=secid%3Aadvisory%2FCVE-2021-44228"
+      }
+    },
+    {
+      "name": "lookup_encoding_special_chars",
+      "description": "lookup(type, identifier) percent-encodes #, &, and spaces inside the identifier.",
+      "category": "lookup",
+      "input": {
+        "method": "lookup",
+        "args": {
+          "type": "control",
+          "identifier": "AC-1#a & b"
+        }
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:control/AC-1#a & b",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:control/example.org/ctrl#AC-1#a & b",
+              "weight": 100,
+              "url": "https://example.org/controls/ac-1"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://example.org/controls/ac-1",
+        "was_corrected": false,
+        "resolution_result_count": 1,
+        "registry_result_count": 0,
+        "message": null,
+        "request_url_contains": "secid=secid%3Acontrol%2FAC-1%23a%20%26%20b",
+        "request_url_not_contains": "#a"
+      }
+    },
+    {
+      "name": "lookup_unknown_type",
+      "description": "lookup against an unknown type returns status=not_found with guidance.",
+      "category": "lookup",
+      "input": {
+        "method": "lookup",
+        "args": {
+          "type": "notavalidtype",
+          "identifier": "CVE-2021-44228"
+        }
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:notavalidtype/CVE-2021-44228",
+          "status": "not_found",
+          "results": [],
+          "message": "Unknown type 'notavalidtype'. Valid types: advisory, weakness, ttp, control, capability, methodology, disclosure, regulation, entity, reference"
+        }
+      },
+      "expected": {
+        "status": "not_found",
+        "best_url": null,
+        "was_corrected": false,
+        "resolution_result_count": 0,
+        "registry_result_count": 0,
+        "message": "Unknown type 'notavalidtype'. Valid types: advisory, weakness, ttp, control, capability, methodology, disclosure, regulation, entity, reference",
+        "request_url_contains": "secid=secid%3Anotavalidtype%2FCVE-2021-44228"
+      }
+    },
+    {
+      "name": "best_url_method_multi_result",
+      "description": "Client best_url/bestUrl/BestURL method resolves and returns the highest-weight URL.",
+      "category": "best_url",
+      "input": {
+        "secid": "secid:ttp/mitre.org/attack#T1059.003",
+        "method": "best_url"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:ttp/mitre.org/attack#T1059.003",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:ttp/mitre.org/attack#T1059.003",
+              "weight": 50,
+              "url": "https://d3fend.mitre.org/offensive-technique/attack/T1059.003"
+            },
+            {
+              "secid": "secid:ttp/mitre.org/attack#T1059.003",
+              "weight": 100,
+              "url": "https://attack.mitre.org/techniques/T1059/003/"
+            },
+            {
+              "secid": "secid:ttp/mitre.org/attack#T1059.003",
+              "weight": 80,
+              "url": "https://www.mitreatt.ck.wiki/techniques/T1059/003"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "best_url": "https://attack.mitre.org/techniques/T1059/003/",
+        "request_url_contains": "secid=secid%3Attp%2Fmitre.org%2Fattack%23T1059.003"
+      }
+    },
+    {
+      "name": "best_url_method_registry_only",
+      "description": "Client best_url/bestUrl/BestURL method returns None/undefined/empty string when results are registry-only.",
+      "category": "best_url",
+      "input": {
+        "secid": "secid:control/nist.gov/csf@2.0",
+        "method": "best_url"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:control/nist.gov/csf@2.0",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:control/nist.gov/csf@2.0",
+              "data": {
+                "official_name": "NIST Cybersecurity Framework v2.0",
+                "urls": [{"type": "website", "url": "https://www.nist.gov/cyberframework"}]
+              }
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "best_url": null
+      }
+    },
+    {
+      "name": "best_url_method_server_error",
+      "description": "Client best_url/bestUrl/BestURL method returns None/undefined/empty string when the server returns status=error.",
+      "category": "best_url",
+      "input": {
+        "secid": "!!!not-a-secid!!!",
+        "method": "best_url"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "!!!not-a-secid!!!",
+          "status": "error",
+          "results": [],
+          "message": "Could not parse input."
+        }
+      },
+      "expected": {
+        "best_url": null
+      }
+    },
+    {
+      "name": "best_url_method_invalid_json",
+      "description": "Client best_url/bestUrl/BestURL method returns None/undefined (or error in Go) when resolve fails to parse the response.",
+      "category": "best_url",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "best_url"
+      },
+      "mock_response": {
+        "http_status": 502,
+        "raw_body": "<html><body>Bad Gateway</body></html>",
+        "content_type": "text/html"
+      },
+      "expected": {
+        "raises_error": true
+      }
+    },
+    {
+      "name": "found_format_metadata_all_fields",
+      "description": "Resolution result with all five optional format metadata fields (content_type, parsability, schema, parsing_instructions, auth) preserves them across all clients.",
+      "category": "found",
+      "input": {
+        "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:advisory/mitre.org/cve#CVE-2021-44228",
+              "weight": 100,
+              "url": "https://cveawg.mitre.org/api/cve/CVE-2021-44228",
+              "content_type": "application/json",
+              "parsability": "structured",
+              "schema": "secid:reference/cve.org/cve-json@5.1",
+              "parsing_instructions": "secid:reference/mitre.org/cve#parsing-guide",
+              "auth": "none"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://cveawg.mitre.org/api/cve/CVE-2021-44228",
+        "was_corrected": false,
+        "resolution_result_count": 1,
+        "registry_result_count": 0,
+        "message": null,
+        "first_resolution_result": {
+          "content_type": "application/json",
+          "parsability": "structured",
+          "schema": "secid:reference/cve.org/cve-json@5.1",
+          "parsing_instructions": "secid:reference/mitre.org/cve#parsing-guide",
+          "auth": "none"
+        }
+      }
+    },
+    {
+      "name": "found_format_metadata_absent",
+      "description": "Resolution result without optional format metadata fields leaves them unset (None / undefined / empty string).",
+      "category": "found",
+      "input": {
+        "secid": "secid:weakness/mitre.org/cwe#CWE-79",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:weakness/mitre.org/cwe#CWE-79",
+          "status": "found",
+          "results": [
+            {
+              "secid": "secid:weakness/mitre.org/cwe#CWE-79",
+              "weight": 100,
+              "url": "https://cwe.mitre.org/data/definitions/79.html"
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://cwe.mitre.org/data/definitions/79.html",
+        "was_corrected": false,
+        "resolution_result_count": 1,
+        "registry_result_count": 0,
+        "message": null,
+        "first_resolution_result": {
+          "content_type": null,
+          "parsability": null,
+          "schema": null,
+          "parsing_instructions": null,
+          "auth": null
+        }
+      }
+    },
+    {
+      "name": "found_unknown_envelope_and_result_fields",
+      "description": "Synthetic forward-compatibility fixture: envelope with top-level filter and unknown keys plus result with lang and unknown keys is tolerated without error.",
+      "category": "edge_case",
+      "input": {
+        "secid": "secid:regulation/bsi.bund.de/it-grundschutz#GS-1",
+        "method": "resolve"
+      },
+      "mock_response": {
+        "http_status": 200,
+        "body": {
+          "secid_query": "secid:regulation/bsi.bund.de/it-grundschutz#GS-1",
+          "status": "found",
+          "filter": {
+            "country": "DE",
+            "total_before_filter": 5
+          },
+          "future_envelope_field": {
+            "experimental": true
+          },
+          "results": [
+            {
+              "secid": "secid:regulation/bsi.bund.de/it-grundschutz#GS-1",
+              "weight": 100,
+              "url": "https://www.bsi.bund.de/DE/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/IT-Grundschutz/it-grundschutz_node.html",
+              "lang": "de",
+              "future_result_field": [1, 2, 3]
+            }
+          ],
+          "message": null
+        }
+      },
+      "expected": {
+        "status": "found",
+        "best_url": "https://www.bsi.bund.de/DE/Themen/Unternehmen-und-Organisationen/Standards-und-Zertifizierung/IT-Grundschutz/it-grundschutz_node.html",
+        "was_corrected": false,
+        "resolution_result_count": 1,
+        "registry_result_count": 0,
+        "message": null
       }
     }
   ]

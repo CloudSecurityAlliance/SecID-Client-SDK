@@ -158,6 +158,7 @@ The server found something but couldn't fully resolve:
 1. Show the `message` — it's human/AI-readable guidance
 2. `results` is empty; there's nothing to display
 3. Suggest: check the type, check the namespace spelling, try cross-source search
+4. **Note on `submit_feedback` in messages:** Server `not_found` messages often mention the `submit_feedback` MCP tool (exposed on `https://secid.cloudsecurityalliance.org/mcp` with `category: "missing-namespace" | "correction" | "suggestion"`). HTTP-only clients can display the `message` string as-is; MCP-connected agents can call `submit_feedback` directly when a legitimate security source is missing from the registry.
 
 ## Handling `error` Status
 
@@ -228,6 +229,7 @@ Resolution results may include optional metadata describing the data format at t
 
 | Field | Type | Meaning |
 |-------|------|---------|
+| `lang` | string | ISO 639-1 language code of the resource at the URL (e.g., `"en"`, `"de"`, `"fr"`), present when a source provides language-specific URLs |
 | `content_type` | string | MIME type of the resource (e.g., `application/json`, `text/html`) |
 | `parsability` | string | `structured` (machine-readable) or `scraped` (requires HTML parsing) |
 | `schema` | string | SecID reference to the data schema (e.g., `secid:reference/mitre.org/cvelistV5`) |
@@ -250,4 +252,11 @@ elif result.parsability == "scraped":
 2. **Multiple `corrected` results:** The server may correct to multiple possible matches — display all
 3. **Mixed result types:** A single response won't mix resolution results (`weight`+`url`) with registry results (`data`) — but code defensively
 4. **Very long results arrays:** Cross-source search can return 10+ results. Consider pagination in your UI
-5. **`message` field present on `found`/`corrected`:** Shouldn't happen per spec, but ignore it if present — results are authoritative
+5. **`message` field present on `found`/`corrected`/`related`:** While `message` is always present on `not_found`/`error`, it also appears on some `corrected` and `related` responses (such as version-alias redirects or empty filtered listings). Use `results` when present, and surface `message` when `results` is empty or as supplemental context.
+
+## MCP Tools (`describe` and `submit_feedback`) vs HTTP `resolve`
+
+If you are integrating via the MCP server (`https://secid.cloudsecurityalliance.org/mcp`) rather than the REST API, two additional tools complement `resolve` and `lookup`:
+
+- **`describe(secid)` vs `resolve(secid)`:** `resolve` resolves a SecID at any depth (including `#subpath` item URLs). `describe` strips any `#subpath` (`#...` or `%23...`) before calling the resolver so it always returns source-, namespace-, or type-level registry metadata (`official_name`, `patterns`, `examples`, `urls`), and for bare-type queries (`secid:advisory`) augments the response with declared `subtypes`.
+- **`submit_feedback(category, secid, message, suggested_urls?)`:** When `resolve` or `lookup` returns `not_found` for a real security source/organization, or when existing registry data needs correction, MCP agents can invoke `submit_feedback` with `category` set to `"missing-namespace"`, `"correction"`, or `"suggestion"` to record feedback for triage.

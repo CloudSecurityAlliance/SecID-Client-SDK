@@ -26,8 +26,10 @@ tests/
 │   ├── fixtures.json          # The conformance test cases
 │   └── README.md              # This file
 └── conformance-harness/
-    └── python/run.py          # Run-fixtures-against-a-target harness (TS/Go to come)
+    └── python/run.py          # Run-fixtures-against-a-target harness (stdlib Python)
 ```
+
+One language-independent harness (`tests/conformance-harness/python/run.py`, stdlib-only Python) is sufficient: the subject under test is an HTTP resolver endpoint (`GET /api/v1/resolve`), not a language SDK. Language-specific client behavior is tested by `tests/fixtures.json` across the Python, TypeScript, and Go harnesses.
 
 ## Running
 
@@ -97,7 +99,7 @@ See `schema.json` for the formal JSON Schema. The shape:
 
 A variant is a named modification of a base test — same input shape, slightly different parameters, different expected behavior. The canonical use case is `with_data`, which adds `?include_data=true` to the request and asserts that the response now includes the `data` field on each result.
 
-Implementations that don't yet support a variant's feature should be tested WITHOUT the variant (omit `--variant` for that name). Variants are opt-in by design.
+Implementations that don't yet support a variant's feature should be tested WITHOUT the variant (omit `--variant` for that name). Variants are opt-in by design. In particular, CI (`.github/workflows/test.yml`) runs the default conformance suite against `https://secid.cloudsecurityalliance.org` without `--variant with_data` because the live resolver does not yet implement `?include_data=true` on subpath resolution (`resolve-cve-2021-44228::with_data`); run `--variant with_data` manually when testing a resolver that implements that feature.
 
 ## Adding a fixture
 
