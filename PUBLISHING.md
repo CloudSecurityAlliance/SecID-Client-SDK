@@ -162,12 +162,11 @@ After bumping, re-run the dry-run / check steps above before each publish.
 
 **Current registry status** (updated 2026-11-02):
 
-- PyPI `csa-secid`: Trusted Publisher configured (`CloudSecurityAlliance/SecID-Client-SDK`, `release.yml`, environment `pypi`) and `PYPI_PUBLISH_ENABLED=true` (`0.1.0` pre-1.0 series).
-- npm `@cloudsecurityalliance/secid`: not yet published.
-- Go: `github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v0.1.0` (`go/v0.1.0` tag).
+- PyPI `csa-secid`: Trusted Publisher configured (`CloudSecurityAlliance/SecID-Client-SDK`, `release.yml`, environment `pypi`) and `PYPI_PUBLISH_ENABLED=true`. Published at `0.1.0` (`0.Y.Z` pre-1.0 series). An initial `1.0.0` test release was removed/yanked in PyPI; because PyPI permanently retires uploaded version strings, future 1.x releases will start at `1.0.1` or `1.1.0`.
+- npm `@cloudsecurityalliance/secid`: not yet published (`0.1.0` in `package.json`).
+- Go: `github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v0.1.0` (`go/v0.1.0` tag). Because `proxy.golang.org` cached an initial `v1.0.0` tag before the switch to `0.Y.Z`, `go/go.mod` includes `retract [v1.0.0, v1.0.1]` (published to the proxy via `go/v1.0.1`) so `@latest` resolves to `v0.1.0` and subsequent `0.Y.Z` releases; future 1.x releases will start at `v1.0.2` or `v1.1.0`.
 
-All three start in the `0.Y.Z` series (`0.1.0`), not renames, so there is nothing to
-deprecate. Local checks: `python -m build` plus `twine check
+Local checks: `python -m build` plus `twine check
 --strict` PASSED; the wheel holds only `secid_client.py` and installs a working
 `secid` CLI in a clean venv. `npm pack --dry-run` lists 7 files; a packed
 tarball installs into a scratch project, where both `npx secid` and `import`
