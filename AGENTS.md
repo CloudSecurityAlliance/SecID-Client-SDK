@@ -152,3 +152,12 @@ Published as `csa-secid` (PyPI) and `github.com/CloudSecurityAlliance/SecID-Clie
 Change order: spec and registry in `SecID` → API behavior in `SecID-Service` → client expectations here. Link the PRs across repos so the rollout order is explicit.
 
 **The MCP server serves its own forked copy of this repo's docs.** `secid://docs/build-a-client` and `secid://docs/prompt-template` are hardcoded string constants in `SecID-Service/src/mcp.ts` (`BUILD_A_CLIENT_DOC`, `PROMPT_TEMPLATE_DOC`), not fetched from `skills/build-a-client/`. They drift silently. When editing anything under `skills/build-a-client/`, check whether the served copy needs the same change and open a companion PR in SecID-Service.
+
+## Code Review Rules
+
+When running an independent code review (`codex review --base main`, `codex exec`, Claude Code Review via [`REVIEW.md`](REVIEW.md), or human/agent review), check every PR against [`REVIEW.md`](REVIEW.md):
+
+1. **Authority, provenance, and CI/release guardrails:** Verify `AI-Agent: <Name>` commit trailers and `*Agent: <Name> (SecID governing agent)*` PR headers; require an independent cross-vendor review for any change to `.github/workflows/*.yml`, `tests/check_mcp_docs_sync.py`, `AGENTS.md`, or `REVIEW.md`; keep GitHub Actions SHA-pinned; and keep all three clients version-aligned on the `0.Y.Z` series.
+2. **Client security invariants (Python, TypeScript, Go):** Verify strict `http`/`https` URL allowlisting (`resolution_results` and `best_url`/`bestUrl`/`BestURL`), the 10 MB streaming response cap (`MAX_RESPONSE_BYTES`), C0/C1 terminal control-character stripping on CLI output, byte-identical percent-encoding of the full `secid` query parameter (`#` → `%23`), and zero runtime dependencies.
+3. **Cross-language fixture parity & MCP doc sync:** Ensure behavior changes are added to `tests/fixtures.json` and pass Python, TypeScript, and Go test suites and `tests/check_mcp_docs_sync.py`.
+
