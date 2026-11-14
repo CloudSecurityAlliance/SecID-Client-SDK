@@ -13,6 +13,9 @@ name: Release
 # version is not SemVer, does not match the version files, or is 1.0.0 or
 # higher without an entry for that exact tag in RELEASE-APPROVALS.json. A
 # refused tag builds and publishes nothing (python-publish needs python-build).
+# After building, the same script checks the built packages themselves (wheel
+# and sdist metadata, the npm tarball's package.json) against the tag, and only
+# those checked files are uploaded or published.
 # Why: docs/incidents/2026-11-02-pypi-csa-secid-1.0.0.md. Rules: PUBLISHING.md,
 # "Version policy".
 #
@@ -78,6 +81,9 @@ jobs:
           pip install build twine
           python -m build
           twine check --strict dist/*
+      - name: Check the built wheel and sdist carry the tag's version
+        working-directory: .
+        run: python3 -I scripts/check_release_version.py --tag "$GITHUB_REF_NAME" --dist python/dist
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: python-dist
@@ -145,8 +151,19 @@ jobs:
           fi
       - run: npm ci
       - run: npm test # also asserts VERSION in secid-client.ts == package.json
-      - name: Publish with provenance
-        run: npm publish --provenance --access public
+      # Pack once, check that tarball, and publish exactly that tarball, so the
+      # package that reaches npm is the one whose version was checked.
+      - name: Pack and check the tarball carries the tag's version
+        run: |
+          pack_dir="$RUNNER_TEMP/npm-pack"
+          rm -rf "$pack_dir" && mkdir -p "$pack_dir"
+          npm pack --pack-destination "$pack_dir"
+          python3 -I ../scripts/check_release_version.py --tag "$GITHUB_REF_NAME" --npm-pack "$pack_dir"
+      - name: Publish the checked tarball with provenance
+        run: |
+          set -- "$RUNNER_TEMP"/npm-pack/*.tgz
+          [ "$#" -eq 1 ] && [ -f "$1" ] || { echo "::error::expected one checked tarball"; exit 1; }
+          npm publish "$1" --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

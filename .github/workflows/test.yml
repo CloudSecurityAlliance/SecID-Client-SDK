@@ -46,8 +46,9 @@ jobs:
       - name: Run tests
         run: pytest test_secid_client.py -v
       - name: Run release version check unit tests
-        # scripts/check_release_version.py gates release.yml; it runs on the
-        # runner's system python3, so test it across the whole matrix.
+        # scripts/check_release_version.py gates release.yml and needs Python
+        # 3.11+ (tomllib); release.yml runs it on the runner's system python3.
+        if: ${{ !contains(fromJSON('["3.9", "3.10"]'), matrix.python-version) }}
         working-directory: .
         run: python -I scripts/test_check_release_version.py -v
 
