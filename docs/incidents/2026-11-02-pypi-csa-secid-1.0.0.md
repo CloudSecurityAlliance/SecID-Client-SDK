@@ -90,7 +90,12 @@ Run on the files at #28's commit `4f357ff`, `--files` exits 1. Had this CI gate 
 3. **A tag on an old commit runs the old workflow.** GitHub runs `release.yml` as it stood at the tagged commit, and before this change it had no version check. The `main` commits from #28 (`4f357ff`) to `1dc8336` carry the old workflow and version files at `1.0.0`. Tagging one of them `typescript/v1.0.0` would publish 1.0.0 to npm once `NPM_PUBLISH_ENABLED` is set. It is not set today.
 4. **The agent works with Kurt's credentials.** Whoever holds them can edit the approvals file in a pull request, change the workflow, or push a tag. The check turns an unnoticed mistake into a visible change that needs review. It does not stop a deliberate one.
 
-## Recommendation (Kurt's decision)
+## Recommendation (Kurt's decision): adopted 2026-11-14
+
+**Status:** Kurt selected the offered option "Yes, add the ruleset (Recommended)" on 2026-11-14.
+- **What is active:** repository ruleset 27284821, "Block unapproved v1+ release tags". It blocks creating tags matching `go/v1*`, `python/v1*` and `typescript/v1*`, with an empty bypass list.
+- **How it was verified:** a matching tag pushed with admin credentials was rejected (`GH013`), using a temporary non-release pattern that was then removed. A non-matching tag was accepted.
+- **Not affected:** the existing `go/v1.0.1` retraction tag.
 
 **Add a tag ruleset to this repository that restricts creation of tags matching `go/v1*`, `python/v1*` and `typescript/v1*`, with an empty bypass list.** Add a pattern such as `go/v2*` before any later major version.
 
