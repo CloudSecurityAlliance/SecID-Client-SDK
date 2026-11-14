@@ -3,20 +3,26 @@
 
 Why this exists: on 2026-11-02 a `python/v1.0.0` tag published `csa-secid`
 1.0.0 to PyPI although the program's series was 0.Y.Z. Nothing stopped it, and
-PyPI never lets a version number be reused. See
+PyPI never accepts the same file name twice. See
 docs/incidents/2026-11-02-pypi-csa-secid-1.0.0.md.
 
-Two modes. Run both with `python3 -I` (isolated mode); stdlib only, Python 3.9+.
+Run it with `python3 -I` (isolated mode). Stdlib only; Python 3.11+ (tomllib).
 
-  Tag mode, run first in every release.yml job that builds or publishes:
+  Tag mode, the first step in every release.yml job that builds or publishes:
 
       python3 -I scripts/check_release_version.py --tag python/v0.2.0
+
+  Artifact mode, in release.yml after building and before uploading or
+  publishing. It checks the built packages themselves:
+
+      python3 -I scripts/check_release_version.py --tag python/v0.2.0 --dist python/dist
+      python3 -I scripts/check_release_version.py --tag typescript/v0.2.0 --npm-pack DIR
 
   Files mode, run by CI (test.yml) on every pull request and push to main:
 
       python3 -I scripts/check_release_version.py --files
 
-Both modes fail (exit 1) when:
+Tag and files mode fail (exit 1) when:
 
   * a version is not valid SemVer 2.0.0;
   * the version files disagree with each other (lockstep), or, in tag mode,
@@ -26,10 +32,18 @@ Both modes fail (exit 1) when:
     that exact tag. Files mode needs an entry for some tag with that version;
   * RELEASE-APPROVALS.json exists and is malformed.
 
-The version files are python/secid_client.py (__version__), python/pyproject.toml
-(a static [project] version if present, otherwise it must declare the version
-dynamic), typescript/package.json, typescript/src/secid-client.ts (VERSION) and
-go/secid.go (Version).
+Artifact mode runs the tag check, then also fails unless the built packages
+carry exactly the tag's version and the right name. That means the wheel's
+METADATA and the sdist's PKG-INFO for --dist, and package/package.json inside
+the single .tgz for --npm-pack.
+
+The version files are python/secid_client.py (__version__),
+python/pyproject.toml, typescript/package.json, typescript/src/secid-client.ts
+(VERSION) and go/secid.go (Version). pyproject.toml either has a static
+[project] version, or declares it dynamic with Hatchling reading
+python/secid_client.py by its default pattern ([tool.hatch.version] is exactly
+path = "secid_client.py"). In the dynamic case the check reads the version the
+way Hatchling would, so a version source that diverges from __version__ fails.
 
 RELEASE-APPROVALS.json is checked for SYNTAX ONLY. This script cannot tell
 whether Kurt really approved anything: anyone who can edit the file can add an
@@ -42,13 +56,21 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import email.parser
 import json
 import os
 import pathlib
 import re
 import sys
+import tarfile
 import urllib.parse
+import zipfile
 from typing import Dict, List, Optional, Tuple
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python < 3.11; main() refuses to run
+    tomllib = None  # type: ignore[assignment]
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 APPROVALS_FILE = "RELEASE-APPROVALS.json"
@@ -72,6 +94,12 @@ SEMVER_RE = re.compile(
     re.ASCII,
 )
 DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", re.ASCII)
+
+# Hatchling's default version pattern (hatchling/version/core.py), applied the
+# way Hatchling applies it: re.search with MULTILINE, first match wins.
+HATCH_DEFAULT_PATTERN = r"""(?i)^(__version__|VERSION) *= *([\'"])v?(?P<version>.+?)\2"""
+HATCH_VERSION_CONFIG = {"path": "secid_client.py"}
+PYPROJECT = "python/pyproject.toml"
 
 
 class CheckError(Exception):
@@ -112,39 +140,63 @@ def _single(pattern: str, text: str, label: str) -> str:
     return found[0]
 
 
-def _pyproject_version(text: str) -> Optional[str]:
-    """Return the static [project] version, or None if the version is dynamic.
+def _table(data: dict, *keys: str) -> dict:
+    """Return data[k1][k2]..., or {} if absent; raise if a level is not a table."""
+    for key in keys:
+        data = data.get(key, {})
+        if not isinstance(data, dict):
+            raise CheckError(f"{PYPROJECT}: {'.'.join(keys)} must be a table")
+    return data
 
-    Reads only the [project] table, line by line (tomllib is not in 3.9/3.10).
+
+def _load_pyproject(repo: pathlib.Path) -> dict:
+    try:
+        return tomllib.loads(_read(repo, PYPROJECT))
+    except tomllib.TOMLDecodeError as exc:
+        raise CheckError(f"{PYPROJECT} is not valid TOML: {exc}") from None
+
+
+def _pyproject_versions(repo: pathlib.Path) -> Dict[str, str]:
+    """Return the version pyproject.toml gives the built package, labelled.
+
+    Static: [project] version. Dynamic: only Hatchling's default regex source
+    reading python/secid_client.py is accepted, and the version is read the
+    way Hatchling reads it, so it joins the lockstep comparison.
     """
-    table = None
-    static = []
-    dynamic = False
-    for line in text.splitlines():
-        stripped = line.strip()
-        # [table] or [[array-of-tables]]; either one ends the [project] table.
-        header = re.fullmatch(r"\[{1,2}\s*([^\[\]]+?)\s*\]{1,2}\s*(?:#.*)?", stripped)
-        if header:
-            table = header.group(1).strip()
-            continue
-        if table != "project":
-            continue
-        version = re.fullmatch(r'version\s*=\s*"([^"]*)"\s*(?:#.*)?', stripped)
-        if version:
-            static.append(version.group(1))
-        if re.fullmatch(r'dynamic\s*=\s*\[[^\]]*"version"[^\]]*\]\s*(?:#.*)?', stripped):
-            dynamic = True
-    if len(static) > 1:
-        raise CheckError("python/pyproject.toml [project] declares version more than once")
-    if static and dynamic:
-        raise CheckError("python/pyproject.toml [project] declares version both static and dynamic")
-    if static:
-        return static[0]
-    if not dynamic:
+    data = _load_pyproject(repo)
+    project = _table(data, "project")
+    dynamic = project.get("dynamic", [])
+    if not isinstance(dynamic, list):
+        raise CheckError(f"{PYPROJECT}: [project] dynamic must be a list")
+    static = project.get("version")
+    if static is not None and "version" in dynamic:
+        raise CheckError(f"{PYPROJECT} [project] declares version both static and dynamic")
+    if static is not None:
+        if not isinstance(static, str):
+            raise CheckError(f"{PYPROJECT} [project] version must be a string")
+        return {f"{PYPROJECT} [project] version": static}
+    if "version" not in dynamic:
+        raise CheckError(f'{PYPROJECT} [project] has neither version = "..." nor dynamic = ["version"]')
+
+    backend = _table(data, "build-system").get("build-backend")
+    if backend != "hatchling.build":
         raise CheckError(
-            'python/pyproject.toml [project] has neither version = "..." nor dynamic = ["version"]'
+            f"{PYPROJECT}: a dynamic version is only checked for build-backend "
+            f'"hatchling.build", found {backend!r}'
         )
-    return None
+    if "hooks" in _table(data, "tool", "hatch", "metadata"):
+        raise CheckError(f"{PYPROJECT}: [tool.hatch.metadata.hooks] can rewrite the version; not allowed")
+    config = _table(data, "tool", "hatch").get("version")
+    if config != HATCH_VERSION_CONFIG:
+        raise CheckError(
+            f'{PYPROJECT}: [tool.hatch.version] must be exactly path = "secid_client.py" '
+            f"(the default regex source on a checked version file), found {config!r}"
+        )
+    source = "python/" + HATCH_VERSION_CONFIG["path"]
+    match = re.search(HATCH_DEFAULT_PATTERN, _read(repo, source), re.MULTILINE)
+    if match is None:
+        raise CheckError(f"Hatchling's default pattern finds no version in {source}")
+    return {f"{PYPROJECT} dynamic version (as Hatchling reads {source})": match.group("version")}
 
 
 def read_versions(repo: pathlib.Path) -> Dict[str, str]:
@@ -170,9 +222,7 @@ def read_versions(repo: pathlib.Path) -> Dict[str, str]:
     if not isinstance(package, dict) or not isinstance(package.get("version"), str):
         raise CheckError('typescript/package.json has no string "version"')
     versions["typescript/package.json version"] = package["version"]
-    static = _pyproject_version(_read(repo, "python/pyproject.toml"))
-    if static is not None:
-        versions["python/pyproject.toml version"] = static
+    versions.update(_pyproject_versions(repo))
     return versions
 
 
@@ -307,6 +357,102 @@ def check_files(repo: pathlib.Path) -> str:
     return f"version files agree on {version} (0.Y.Z series)"
 
 
+def _normalize_dist_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _metadata_name_version(text: str, where: str) -> Tuple[str, str]:
+    """Return (Name, Version) from core metadata (wheel METADATA, sdist PKG-INFO)."""
+    headers = email.parser.HeaderParser().parsestr(text)
+    names = headers.get_all("Name") or []
+    versions = headers.get_all("Version") or []
+    if len(names) != 1 or len(versions) != 1:
+        raise CheckError(f"{where}: expected one Name and one Version header")
+    return names[0].strip(), versions[0].strip()
+
+
+def _only_files(directory: pathlib.Path, label: str) -> List[pathlib.Path]:
+    if not directory.is_dir():
+        raise CheckError(f"{label} {directory} is not a directory")
+    return sorted(directory.iterdir())
+
+
+def _version_mismatch(where: str, found: str, tag: str, version: str) -> CheckError:
+    hint = ""
+    if any(ch in version for ch in "-+"):
+        hint = " (PEP 440 rewrites SemVer pre-release and build suffixes, so release Python with plain X.Y.Z)"
+    return CheckError(f"{where} says version {found!r} but the tag {tag} says {version!r}{hint}")
+
+
+def check_python_dist(tag: str, dist_dir: pathlib.Path, repo: pathlib.Path) -> str:
+    """Check that the built wheel and sdist carry exactly the tag's version."""
+    language, version = parse_tag(tag)
+    if language != "python":
+        raise CheckError(f"--dist checks Python distributions, but {tag} is not a python/ tag")
+    project_name = _table(_load_pyproject(repo), "project").get("name")
+    if not isinstance(project_name, str):
+        raise CheckError(f"{PYPROJECT} [project] has no name")
+    files = _only_files(dist_dir, "--dist")
+    wheels = [f for f in files if f.name.endswith(".whl")]
+    sdists = [f for f in files if f.name.endswith(".tar.gz")]
+    if len(wheels) != 1 or len(sdists) != 1 or len(files) != 2:
+        raise CheckError(
+            f"{dist_dir} must hold exactly one wheel and one sdist, found "
+            f"{[f.name for f in files]}"
+        )
+
+    found = []
+    with zipfile.ZipFile(wheels[0]) as wheel:
+        members = [n for n in wheel.namelist() if re.fullmatch(r"[^/]+\.dist-info/METADATA", n)]
+        if len(members) != 1:
+            raise CheckError(f"{wheels[0].name}: expected one *.dist-info/METADATA, found {members}")
+        found.append((f"{wheels[0].name} METADATA", wheel.read(members[0]).decode("utf-8")))
+    with tarfile.open(sdists[0], "r:gz") as sdist:
+        members = [m for m in sdist.getmembers() if m.isfile() and re.fullmatch(r"[^/]+/PKG-INFO", m.name)]
+        if len(members) != 1:
+            raise CheckError(f"{sdists[0].name}: expected one top-level PKG-INFO, found {len(members)}")
+        handle = sdist.extractfile(members[0])
+        found.append((f"{sdists[0].name} PKG-INFO", handle.read().decode("utf-8")))
+
+    for where, text in found:
+        name, built = _metadata_name_version(text, where)
+        if _normalize_dist_name(name) != _normalize_dist_name(project_name):
+            raise CheckError(f"{where} names the package {name!r}, expected {project_name!r}")
+        if built != version:
+            raise _version_mismatch(where, built, tag, version)
+    return f"{wheels[0].name} and {sdists[0].name} carry {project_name} {version}"
+
+
+def check_npm_pack(tag: str, pack_dir: pathlib.Path, repo: pathlib.Path) -> str:
+    """Check that the single packed npm tarball carries exactly the tag's version."""
+    language, version = parse_tag(tag)
+    if language != "typescript":
+        raise CheckError(f"--npm-pack checks an npm tarball, but {tag} is not a typescript/ tag")
+    try:
+        expected_name = json.loads(_read(repo, "typescript/package.json")).get("name")
+    except (json.JSONDecodeError, AttributeError):
+        raise CheckError("typescript/package.json has no name") from None
+    files = _only_files(pack_dir, "--npm-pack")
+    if len(files) != 1 or not files[0].name.endswith(".tgz"):
+        raise CheckError(f"{pack_dir} must hold exactly one .tgz, found {[f.name for f in files]}")
+    tarball = files[0]
+    with tarfile.open(tarball, "r:gz") as archive:
+        members = [m for m in archive.getmembers() if m.isfile() and m.name == "package/package.json"]
+        if len(members) != 1:
+            raise CheckError(f"{tarball.name}: expected one package/package.json, found {len(members)}")
+        try:
+            packed = json.loads(archive.extractfile(members[0]).read().decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise CheckError(f"{tarball.name}: package/package.json is not valid JSON") from None
+    if not isinstance(packed, dict):
+        raise CheckError(f"{tarball.name}: package/package.json is not an object")
+    if packed.get("name") != expected_name:
+        raise CheckError(f"{tarball.name} names the package {packed.get('name')!r}, expected {expected_name!r}")
+    if packed.get("version") != version:
+        raise _version_mismatch(f"{tarball.name} package/package.json", packed.get("version"), tag, version)
+    return f"{tarball.name} carries {expected_name} {version}"
+
+
 def _report_error(message: str) -> None:
     prefix = "::error::" if os.environ.get("GITHUB_ACTIONS") == "true" else "error: "
     print(f"{prefix}{message}", file=sys.stderr)
@@ -317,17 +463,39 @@ def main(argv: Optional[List[str]] = None) -> int:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--tag", help="release tag to check, e.g. python/v0.2.0")
     mode.add_argument("--files", action="store_true", help="check the version files only")
+    artifact = parser.add_mutually_exclusive_group()
+    artifact.add_argument(
+        "--dist", type=pathlib.Path, metavar="DIR",
+        help="with --tag python/v...: also check the built wheel and sdist in DIR",
+    )
+    artifact.add_argument(
+        "--npm-pack", type=pathlib.Path, metavar="DIR",
+        help="with --tag typescript/v...: also check the one .tgz in DIR",
+    )
     parser.add_argument(
         "--repo", type=pathlib.Path, default=REPO_ROOT,
         help="repository root (default: the checkout this script lives in)",
     )
     args = parser.parse_args(argv)
+    if (args.dist or args.npm_pack) and args.tag is None:
+        parser.error("--dist and --npm-pack need --tag")
+    if tomllib is None:
+        _report_error(f"this check needs Python 3.11 or newer (tomllib); this is {sys.version.split()[0]}")
+        return 1
     try:
-        message = check_tag(args.tag, args.repo) if args.tag is not None else check_files(args.repo)
+        if args.tag is None:
+            messages = [check_files(args.repo)]
+        else:
+            messages = [check_tag(args.tag, args.repo)]
+            if args.dist:
+                messages.append(check_python_dist(args.tag, args.dist, args.repo))
+            if args.npm_pack:
+                messages.append(check_npm_pack(args.tag, args.npm_pack, args.repo))
     except CheckError as exc:
         _report_error(str(exc))
         return 1
-    print(f"OK: {message}")
+    for message in messages:
+        print(f"OK: {message}")
     return 0
 
 
