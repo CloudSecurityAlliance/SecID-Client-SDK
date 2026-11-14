@@ -1,0 +1,4 @@
+{
+  "about": "Kurt Seifried's approvals for SDK release tags outside the 0.Y.Z series (major version 1 or higher). scripts/check_release_version.py refuses such a tag unless an entry here names that exact tag. The script checks syntax only. An entry is authentic only because every change to this file needs a cross-vendor review that opens the entry's reference and confirms it records Kurt's decision for that exact tag. Format and process: PUBLISHING.md, 'Version policy'.",
+  "approvals": []
+}
