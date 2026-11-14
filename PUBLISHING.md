@@ -333,3 +333,15 @@ git checkout main && git pull
 Watch the run under Actions → Release, approve the environment gate if you set
 one, then run the "Verify after publishing" commands above. The manual steps
 earlier in this guide still work if you prefer them or need a fallback.
+
+## Releasing 1.0 or later: the tag ruleset
+
+Repository ruleset 27284821 blocks creating `go/v1*`, `python/v1*` and `typescript/v1*` tags, with no bypass. Kurt approved it on 2026-11-14; see `docs/incidents/2026-11-02-pypi-csa-secid-1.0.0.md`.
+
+To release a 1.x version, all of these, in order:
+1. Kurt's decision is recorded.
+2. The exact tag is in `RELEASE-APPROVALS.json` and has passed review.
+3. Kurt, or the agent with his explicit go-ahead for that tag, temporarily narrows the ruleset for that one tag. The change is recorded on the release issue, and the ruleset is restored right after the push.
+
+Before the first 2.x release, add `*/v2*` patterns.
+
