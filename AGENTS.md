@@ -69,6 +69,7 @@ Run the test suites (all three should be green before a PR):
 cd python     && python -m pytest test_secid_client.py -v   # needs pytest only; no install step (or `pip install -e . && python -m pytest test_secid_client.py -v`)
 cd typescript && npm ci && npm test                         # `pretest` runs tsc; tests execute from dist/
 cd go         && go test -v ./...
+python3 -I scripts/test_check_release_version.py              # release version policy check
 ```
 
 Run a single test:
@@ -132,7 +133,7 @@ Public surface is deliberately parallel across languages: `resolve`, `lookup`, `
 
 ## Packaging
 
-Published as `csa-secid` (PyPI) and `github.com/CloudSecurityAlliance/SecID-Client-SDK/go` (Go module proxy via `go/vX.Y.Z` tags); `@cloudsecurityalliance/secid` (npm) is not on npm yet, so README "Path 1" gives tarball install commands for Node. Release steps, including the `release.yml` workflow, are in `PUBLISHING.md`. Each language has one version source (`__version__`, `package.json` plus a test-enforced `VERSION` literal, and Go `Version`), and the User-Agent is built from it. The distribution name carries the `csa-` prefix where the registry is flat (PyPI); the import module (`secid_client`) and CLI command (`secid`) stay unprefixed. TypeScript is the only target with a build step (`tsc` → `dist/`) — Python and Go ship the single source file.
+Published as `csa-secid` (PyPI) and `github.com/CloudSecurityAlliance/SecID-Client-SDK/go` (Go module proxy via `go/vX.Y.Z` tags); `@cloudsecurityalliance/secid` (npm) is not on npm yet, so README "Path 1" gives tarball install commands for Node. Release steps, including the `release.yml` workflow, are in `PUBLISHING.md`. Releases stay on the `0.Y.Z` series: `scripts/check_release_version.py` refuses a 1.x tag unless `RELEASE-APPROVALS.json` records Kurt's approval for that exact tag (PUBLISHING.md, "Version policy"). Run it before pushing any tag, because a `go/v*` tag is the release. Each language has one version source (`__version__`, `package.json` plus a test-enforced `VERSION` literal, and Go `Version`), and the User-Agent is built from it. The distribution name carries the `csa-` prefix where the registry is flat (PyPI); the import module (`secid_client`) and CLI command (`secid`) stay unprefixed. TypeScript is the only target with a build step (`tsc` → `dist/`) — Python and Go ship the single source file.
 
 ## Design Constraints
 
@@ -157,7 +158,7 @@ Change order: spec and registry in `SecID` → API behavior in `SecID-Service` �
 
 When running an independent code review (`codex review --base main`, `codex exec`, Claude Code Review via [`REVIEW.md`](REVIEW.md), or human/agent review), check every PR against [`REVIEW.md`](REVIEW.md):
 
-1. **Authority, provenance, and CI/release guardrails:** Verify `AI-Agent: <Name>` commit trailers and `*Agent: <Name> (SecID governing agent)*` PR headers; require an independent cross-vendor review for any change to `.github/workflows/*.yml`, `tests/check_mcp_docs_sync.py`, `AGENTS.md`, or `REVIEW.md`; keep GitHub Actions SHA-pinned; and keep all three clients version-aligned on the `0.Y.Z` series.
+1. **Authority, provenance, and CI/release guardrails:** Verify `AI-Agent: <Name>` commit trailers and `*Agent: <Name> (SecID governing agent)*` PR headers; require an independent cross-vendor review for any change to `.github/workflows/*.yml`, `tests/check_mcp_docs_sync.py`, `scripts/check_release_version.py`, `RELEASE-APPROVALS.json`, `AGENTS.md`, or `REVIEW.md`, and for each `RELEASE-APPROVALS.json` entry confirm its `reference` records Kurt's decision for that exact tag; keep GitHub Actions SHA-pinned; and keep all three clients version-aligned on the `0.Y.Z` series (enforced by `scripts/check_release_version.py`).
 2. **Client security invariants (Python, TypeScript, Go):** Verify strict `http`/`https` URL allowlisting (`resolution_results` and `best_url`/`bestUrl`/`BestURL`), the 10 MB streaming response cap (`MAX_RESPONSE_BYTES`), C0/C1 terminal control-character stripping on CLI output, byte-identical percent-encoding of the full `secid` query parameter (`#` → `%23`), and zero runtime dependencies.
 3. **Cross-language fixture parity & MCP doc sync:** Ensure behavior changes are added to `tests/fixtures.json` and pass Python, TypeScript, and Go test suites and `tests/check_mcp_docs_sync.py`.
 

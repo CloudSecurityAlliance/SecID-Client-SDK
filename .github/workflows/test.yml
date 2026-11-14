@@ -45,6 +45,12 @@ jobs:
         run: pip install pytest
       - name: Run tests
         run: pytest test_secid_client.py -v
+      - name: Run release version check unit tests
+        # scripts/check_release_version.py gates release.yml and needs Python
+        # 3.11+ (tomllib); release.yml runs it on the runner's system python3.
+        if: ${{ !contains(fromJSON('["3.9", "3.10"]'), matrix.python-version) }}
+        working-directory: .
+        run: python -I scripts/test_check_release_version.py -v
 
   typescript:
     name: TypeScript
@@ -111,21 +117,11 @@ jobs:
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version: "1.23"
-      - name: Check cross-language version lockstep
-        run: |
-          python - <<'PY'
-          import json, pathlib, re, sys
-          root = pathlib.Path(".")
-          py_ver = re.search(r'^__version__\s*=\s*"([^"]+)"', (root / "python/secid_client.py").read_text(), re.M).group(1)
-          ts_pkg = json.loads((root / "typescript/package.json").read_text())["version"]
-          ts_src = re.search(r'^export const VERSION\s*=\s*"([^"]+)"', (root / "typescript/src/secid-client.ts").read_text(), re.M).group(1)
-          go_ver = re.search(r'\bVersion\s*=\s*"([^"]+)"', (root / "go/secid.go").read_text()).group(1)
-          versions = {"python": py_ver, "typescript/package.json": ts_pkg, "typescript/secid-client.ts": ts_src, "go": go_ver}
-          print("Detected versions:", versions)
-          if len(set(versions.values())) != 1:
-              print("::error::SDK versions are out of lockstep:", versions, file=sys.stderr)
-              sys.exit(1)
-          PY
+      - name: Check cross-language version lockstep and release version policy
+        # The five version files release.yml checks must agree, be valid
+        # SemVer, and stay on the 0.Y.Z series unless RELEASE-APPROVALS.json
+        # approves that version (scripts/check_release_version.py).
+        run: python3 -I scripts/check_release_version.py --files
       - name: Build, check, and smoke-install Python wheel
         working-directory: python
         run: |
