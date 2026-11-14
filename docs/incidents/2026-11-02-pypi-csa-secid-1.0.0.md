@@ -33,7 +33,7 @@ A push of tag `python/v1.0.0` published `csa-secid` 1.0.0 to PyPI. The program's
 
 ## Impact
 
-- **PyPI will never accept version 1.0.0 again.** It does not let a deleted version be re-uploaded, so the first 1.x release must be 1.0.1 or later. That is why Kurt asked about "a 1.0.1".
+- **PyPI will never accept the 1.0.0 files again.** PyPI never lets a file name be reused, even after the file is deleted ([PyPI docs](https://docs.pypi.org/publishing/troubleshooting/)). The two files this release uploaded, `csa_secid-1.0.0-py3-none-any.whl` and `csa_secid-1.0.0.tar.gz`, can therefore never be uploaded again. This project treats 1.0.0 as retired and requires a new version, so the first 1.x release must be 1.0.1 or later. That is why Kurt asked about "a 1.0.1".
 - **Anyone who installed 1.0.0 is stranded above the 0.Y.Z series.** 1.0.0 was on PyPI from 15:35:24 until Kurt deleted it, no later than 16:02:30. An install from that window sits above every 0.Y.Z release, so `pip install --upgrade csa-secid` keeps it and never offers a 0.Y.Z version. A requirement pinned to `csa-secid==1.0.0` no longer installs from PyPI.
 - **We don't know whether anyone installed it.** Downloads during the window are unknown. PyPI's public download logs on BigQuery (`bigquery-public-data.pypi.file_downloads`) have not been queried for this file, and we cannot see mirrors that synced during the window.
 - **Go:** v1.0.0, and v1.0.1 (which exists only to carry the retraction), stay in the Go module proxy permanently, marked retracted. The first 1.x Go release must be v1.0.2 or later.
@@ -56,19 +56,22 @@ A push of tag `python/v1.0.0` published `csa-secid` 1.0.0 to PyPI. The program's
 
 ## The new check
 
-The check is `scripts/check_release_version.py`, stdlib only, run with `python3 -I`. Its unit tests are in `scripts/test_check_release_version.py`.
+The check is `scripts/check_release_version.py`, stdlib only (Python 3.11+, for `tomllib`), run with `python3 -I`. Its unit tests are in `scripts/test_check_release_version.py`.
 
 - **Tag mode** (`--tag python/v0.2.0`) is the first step after checkout in `release.yml`'s `python-build` and `npm-publish` jobs, before anything is built or published. `python-publish` needs `python-build`, so a refused tag never reaches PyPI. The check fails when:
   - the version is not valid SemVer 2.0.0;
-  - the version files disagree with each other or with the tag. The files are `python/secid_client.py`, `python/pyproject.toml`, `typescript/package.json`, `typescript/src/secid-client.ts` and `go/secid.go`;
+  - the version files disagree with each other or with the tag. The files are `python/secid_client.py`, `python/pyproject.toml`, `typescript/package.json`, `typescript/src/secid-client.ts` and `go/secid.go`. A dynamic version in `pyproject.toml` must come from Hatchling's default source reading `secid_client.py`, and the check reads it the way Hatchling would;
   - the major version is 1 or higher, pre-releases such as `1.0.0-rc.1` included, unless `RELEASE-APPROVALS.json` lists that exact tag. The entry needs `approved_by` set to "Kurt Seifried", a `date`, a `reference` URL to the recorded decision and a `reason`.
+- **Artifact mode** checks what is about to be released, after building and before uploading. `--dist python/dist` reads the wheel's `METADATA` and the sdist's `PKG-INFO`. `--npm-pack DIR` reads `package/package.json` inside the one packed `.tgz`, and `npm-publish` then publishes exactly that tarball. Either fails unless name and version match the tag exactly. This is the backstop for anything that changes the built version without changing the checked files.
 - **Files mode** (`--files`) runs in CI's `package-smoke` job, under the required `ci-passed` gate, on every pull request and push to `main`. It replaces the inline lockstep script and adds the SemVer and series rules. A pull request that moves the version files to 1.x without an approval therefore fails before any tag exists.
 - **Go:** `release.yml` now also runs on `go/v*` tags. The job `go-tag-check` runs the same check, fails loudly and writes what to do into the job summary. It cannot stop anything, because the tag is the release.
-- **Unit tests** run in CI's `python` job on Python 3.9 to 3.13. They use fixture repositories only, never real tags. They show that:
+- **Unit tests** run in CI's `python` job on Python 3.11 to 3.13. They use fixture repositories only, never real tags. They show that:
   - `python/v1.0.0` fails when every file says 1.0.0;
   - `python/v0.2.0` passes when the files say 0.2.0;
   - a listed approval passes, but only for its exact tag;
-  - malformed approvals, bad SemVer and broken lockstep all fail.
+  - malformed approvals, bad SemVer and broken lockstep all fail;
+  - a dynamic version source that diverges from the checked files fails;
+  - built wheels, sdists and npm tarballs whose version or name differs from the tag fail.
 
 **Replay against the real history.** Run on the files at the released commit `1dc8336`, `--tag python/v1.0.0` exits 1:
 
@@ -77,6 +80,8 @@ error: python/v1.0.0 is outside the 0.Y.Z series and RELEASE-APPROVALS.json does
 ```
 
 Run on the files at #28's commit `4f357ff`, `--files` exits 1. Had this CI gate existed, it would have flagged the version from 2026-09-25 on. On the files at `ffb6a11` (#37), `--tag python/v0.1.0` passes.
+
+**Real builds.** A real Hatchling build of this repository (`csa_secid-0.1.0` wheel and sdist) and a real `npm pack` (`cloudsecurityalliance-secid-0.1.0.tgz`) pass artifact mode for the `v0.1.0` tags. Pointing `[tool.hatch.version]` at a file that says 1.0.1 builds `csa_secid-1.0.1`. Tag mode refuses that configuration, and artifact mode on its own refuses the built files.
 
 ## Limits of the check
 
