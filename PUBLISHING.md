@@ -18,6 +18,11 @@ simple regardless of the distribution name.
 > **Versions are immutable.** Once a version is published to npm or PyPI it
 > cannot be overwritten or re-uploaded — a fix requires a new version number.
 > Run the dry-run / check step every time before publishing.
+>
+> **Stay on 0.Y.Z.** A release of 1.0.0 or higher needs Kurt's recorded
+> approval first; see [Version policy](#version-policy). The manual steps below
+> skip the workflow's check, so run it yourself:
+> `python3 -I scripts/check_release_version.py --tag <tag>`.
 
 ---
 
@@ -122,6 +127,7 @@ go install github.com/CloudSecurityAlliance/SecID-Client-SDK/go/cmd/secid@v0.1.0
 ```bash
 git checkout main && git pull
 cd go && go test ./... && cd ..
+python3 -I scripts/check_release_version.py --tag go/v0.1.0   # the tag IS the release: check first
 git tag -a go/v0.1.0 -m "Go client v0.1.0"
 git push origin go/v0.1.0
 ```
@@ -162,7 +168,7 @@ After bumping, re-run the dry-run / check steps above before each publish.
 
 **Current registry status** (updated 2026-11-02):
 
-- PyPI `csa-secid`: Trusted Publisher configured (`CloudSecurityAlliance/SecID-Client-SDK`, `release.yml`, environment `pypi`) and `PYPI_PUBLISH_ENABLED=true`. Published at `0.1.0` (`0.Y.Z` pre-1.0 series). An initial `1.0.0` test release was removed/yanked in PyPI; because PyPI permanently retires uploaded version strings, future 1.x releases will start at `1.0.1` or `1.1.0`.
+- PyPI `csa-secid`: Trusted Publisher configured (`CloudSecurityAlliance/SecID-Client-SDK`, `release.yml`, environment `pypi`) and `PYPI_PUBLISH_ENABLED=true`. Published at `0.1.0` (`0.Y.Z` pre-1.0 series). On 2026-11-02 `1.0.0` was published outside the intended 0.Y.Z series and then deleted ([incident record](docs/incidents/2026-11-02-pypi-csa-secid-1.0.0.md)). PyPI never accepts a deleted version again, so a future 1.x release starts at `1.0.1` or `1.1.0`, and needs an approval (see [Version policy](#version-policy)).
 - npm `@cloudsecurityalliance/secid`: not yet published (`0.1.0` in `package.json`).
 - Go: `github.com/CloudSecurityAlliance/SecID-Client-SDK/go@v0.1.0` (`go/v0.1.0` tag). Because `proxy.golang.org` cached an initial `v1.0.0` tag before the switch to `0.Y.Z`, `go/go.mod` includes `retract [v1.0.0, v1.0.1]` (published to the proxy via `go/v1.0.1`) so `@latest` resolves to `v0.1.0` and subsequent `0.Y.Z` releases; future 1.x releases will start at `v1.0.2` or `v1.1.0`.
 
@@ -175,6 +181,59 @@ builds.
 
 ---
 
+## Version policy
+
+All three clients stay on the `0.Y.Z` series until Kurt approves a 1.x release.
+`scripts/check_release_version.py` enforces this. It was added after
+`csa-secid` 1.0.0 was published outside the intended series
+([incident record](docs/incidents/2026-11-02-pypi-csa-secid-1.0.0.md)).
+
+| Where | Mode | What happens on failure |
+|---|---|---|
+| `release.yml`, first step after checkout in `python-build` and `npm-publish` | `--tag "$GITHUB_REF_NAME"` | Nothing is built or published |
+| `release.yml`, `go-tag-check` on `go/v*` tags | `--tag` | The run fails loudly. The Go release has already happened, so retract it (see the job summary) |
+| `test.yml`, `package-smoke` (under `ci-passed`) | `--files` | The pull request cannot merge |
+| `test.yml`, `python` job | unit tests (`scripts/test_check_release_version.py`) | The pull request cannot merge |
+
+It fails when a version is not valid SemVer, when the version files disagree
+with each other or with the tag, or when the major version is 1 or higher
+(pre-releases such as `1.0.0-rc.1` included) without an approval. Run it
+before pushing any tag, and above all before a `go/` tag:
+
+```bash
+python3 -I scripts/check_release_version.py --tag go/v0.2.0
+python3 -I scripts/check_release_version.py --files
+python3 -I scripts/test_check_release_version.py
+```
+
+### Approving a 1.x release
+
+1. Kurt decides, and the decision is recorded in his words, for example as his
+   answer on a `needs-kurt` issue in the program's governance repository.
+2. A pull request adds an entry for each exact tag to `RELEASE-APPROVALS.json`:
+
+   ```json
+   {
+     "tag": "python/v1.0.1",
+     "approved_by": "Kurt Seifried",
+     "date": "YYYY-MM-DD",
+     "reference": "https://github.com/<org>/<repo>/issues/<n>",
+     "reason": "Why this release leaves the 0.Y.Z series"
+   }
+   ```
+
+3. A cross-vendor review opens `reference` and confirms that it records Kurt's
+   decision for that exact tag. **The script checks the file's syntax only.** It
+   cannot tell a real approval from a made-up one, so this review is what makes
+   an approval authentic (`REVIEW.md`, section 1).
+4. Bump the version files. Files mode passes once some tag with that version is
+   approved. Tag mode passes only for the exact tags listed.
+
+Remember the retired numbers: PyPI `1.0.0` and Go `v1.0.0`/`v1.0.1` can never
+be used.
+
+---
+
 ## Automated publishing
 
 `.github/workflows/release.yml` publishes from GitHub Actions when you push a
@@ -184,9 +243,10 @@ release tag by hand:
 |---|---|---|
 | `python/vX.Y.Z` | PyPI `csa-secid` | **Trusted publishing** (OIDC). No token is stored anywhere. |
 | `typescript/vX.Y.Z` | npm `@cloudsecurityalliance/secid` | `NPM_TOKEN` secret, published with `--provenance` |
-| `go/vX.Y.Z` | nothing (the tag is the Go release) | — |
+| `go/vX.Y.Z` | nothing (the tag is the Go release); `go-tag-check` flags a tag that breaks the version policy, after the fact | — |
 
-Both jobs first check that the tagged commit is an ancestor of `origin/main` and
+Both publish jobs first run the version policy check (see [Version policy](#version-policy)),
+then check that the tagged commit is an ancestor of `origin/main` and
 that the tag matches the version in code, then run the tests, then publish.
 **The workflow does nothing until you opt in:** each publish job is skipped
 unless a repository variable is set to `true`, so a tag pushed before setup is
@@ -238,7 +298,9 @@ secret.
 
 ```bash
 git checkout main && git pull
-# bump versions (see "Bumping versions"), merge that PR, pull again, then:
+# bump versions (see "Bumping versions"), merge that PR, pull again, then
+# check each tag before pushing it (the workflow checks again):
+python3 -I scripts/check_release_version.py --tag python/v0.1.0
 git tag -a python/v0.1.0     -m "Python client v0.1.0"     && git push origin python/v0.1.0
 git tag -a typescript/v0.1.0 -m "TypeScript client v0.1.0" && git push origin typescript/v0.1.0
 git tag -a go/v0.1.0         -m "Go client v0.1.0"         && git push origin go/v0.1.0
