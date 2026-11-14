@@ -5,7 +5,16 @@ name: Release
 #
 #   python/vX.Y.Z      -> PyPI  csa-secid  (trusted publishing, OIDC)
 #   typescript/vX.Y.Z  -> npm   @cloudsecurityalliance/secid (token + provenance)
-#   go/vX.Y.Z          -> nothing to do here; the tag itself is the Go release
+#   go/vX.Y.Z          -> nothing to publish; the tag itself is the Go release.
+#                         go-tag-check flags a bad tag after the fact.
+#
+# VERSION POLICY. The first step after checkout in every job that builds or
+# publishes is scripts/check_release_version.py --tag. It refuses a tag whose
+# version is not SemVer, does not match the version files, or is 1.0.0 or
+# higher without an entry for that exact tag in RELEASE-APPROVALS.json. A
+# refused tag builds and publishes nothing (python-publish needs python-build).
+# Why: docs/incidents/2026-11-02-pypi-csa-secid-1.0.0.md. Rules: PUBLISHING.md,
+# "Version policy".
 #
 # INERT UNTIL CONFIGURED. Each publish job is skipped unless its repository
 # variable is set to "true" (Settings -> Secrets and variables -> Actions ->
@@ -21,6 +30,7 @@ on:
     tags:
       - "python/v*"
       - "typescript/v*"
+      - "go/v*"
 
 permissions: {}
 
@@ -39,6 +49,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Check release version policy
+        working-directory: .
+        run: python3 -I scripts/check_release_version.py --tag "$GITHUB_REF_NAME"
       - name: Check the tagged commit is on main
         working-directory: .
         run: |
@@ -107,6 +120,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Check release version policy
+        working-directory: .
+        run: python3 -I scripts/check_release_version.py --tag "$GITHUB_REF_NAME"
       - name: Check the tagged commit is on main
         working-directory: .
         run: |
@@ -133,3 +149,36 @@ jobs:
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  go-tag-check:
+    # A go/vX.Y.Z tag IS the Go release: proxy.golang.org can fetch and cache
+    # it as soon as anyone asks, so no workflow can stop it. This job runs the
+    # same check after the fact and fails loudly, so a bad tag is seen at once.
+    # Only a tag ruleset (a repository setting) can prevent one; see
+    # docs/incidents/2026-11-02-pypi-csa-secid-1.0.0.md.
+    name: Check Go release tag (after the fact)
+    if: startsWith(github.ref_name, 'go/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Check release version policy
+        run: python3 -I scripts/check_release_version.py --tag "$GITHUB_REF_NAME"
+      - name: Say what to do about the tag
+        if: failure()
+        run: |
+          echo "::error title=Go release tag breaks the version policy::$GITHUB_REF_NAME is a published Go release, and the module proxy may already have cached it. See the job summary."
+          {
+            echo "## Go release tag breaks the version policy"
+            echo
+            echo "The tag is the release, so the Go module proxy may already have cached it."
+            echo "Do not move or re-push it. Instead:"
+            echo
+            echo "1. Retract it in \`go/go.mod\` and publish the retraction, as was done for v1.0.0 and v1.0.1"
+            echo "   (docs/incidents/2026-11-02-pypi-csa-secid-1.0.0.md). If the retraction needs a tag of"
+            echo "   1.0.0 or higher, Kurt must approve that tag in RELEASE-APPROVALS.json first."
+            echo "2. Write an incident record in docs/incidents/ and raise it with the program's governing agent."
+          } >> "$GITHUB_STEP_SUMMARY"
